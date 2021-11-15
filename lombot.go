@@ -217,7 +217,7 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 
 	b.Handle(tb.OnText, func(m *tb.Message) {
 		cred := myBot.UserJoin[m.Sender.ID]
-		if cred != nil && cred.Key != "" && myBot.members[m.Sender.ID] == 0 {
+		if isNewUser(m, cred, &myBot) {
 			if m.Text == cred.Key {
 				b.Delete(m)
 				myBot.members[m.Sender.ID] = 1
@@ -314,10 +314,14 @@ func (myBot *MyBot) notText() func(m *tb.Message) {
 		}
 
 		cred := myBot.UserJoin[m.Sender.ID]
-		if cred.Key != "" && myBot.members[m.Sender.ID] == 0 {
+		if isNewUser(m, cred, myBot) {
 			myBot.Bot.Delete(m)
 		}
 	}
+}
+
+func isNewUser(m *tb.Message, cred *Credentials, myBot *MyBot) bool {
+	return cred != nil && cred.Key != "" && myBot.members[m.Sender.ID] == 0
 }
 
 func writeFile(path string, data []byte) error {
