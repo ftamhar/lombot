@@ -98,10 +98,15 @@ func main() {
 
 	b.Handle("/Bismillah", func(m *tb.Message) {
 		if !m.FromGroup() {
-			b.Send(m.Sender, "MasyaaAllah Tabarakallah")
+			send, _ := b.Send(m.Sender, "MasyaaAllah Tabarakallah")
+			go myBot.deleteChat(m, 60)
+			go myBot.deleteChat(send, 63)
 			return
 		}
-		b.Send(m.Chat, "MasyaaAllah Tabarakallah")
+		send, _ := b.Send(m.Chat, "MasyaaAllah Tabarakallah")
+
+		go myBot.deleteChat(m, 60)
+		go myBot.deleteChat(send, 63)
 	})
 
 	b.Handle("/halo", func(m *tb.Message) {
@@ -160,7 +165,8 @@ func main() {
 		myBot.retry[m.UserJoined.ID]++
 		cm, err := myBot.restrictUser(m)
 		if err != nil {
-			fmt.Println("failed to restrict user:", err.Error())
+			send, _ := b.Send(m.Chat, "Hai Admin, tolong jadikan saya admin agar dapat mengirim captcha 🙏")
+			go myBot.deleteChat(send, 60)
 			return
 		}
 		saveFileJson(myBot.retry, retryPath)
@@ -256,6 +262,13 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 	fmt.Println("bot started")
 	b.Start()
 
+}
+
+func (myBot *MyBot) deleteChat(m *tb.Message, t time.Duration) {
+	select {
+	case <-time.After(t * time.Second):
+		myBot.Bot.Delete(m)
+	}
 }
 
 func (myBot *MyBot) restrictUser(m *tb.Message) (tb.ChatMember, error) {
