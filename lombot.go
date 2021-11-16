@@ -16,11 +16,10 @@ import (
 )
 
 var (
-	membersPath string
-	pwd         string
-	retryPath   string
-	token       *string
-	wait        *int64
+	pwd       string
+	retryPath string
+	token     *string
+	wait      *int64
 )
 
 type Credentials struct {
@@ -33,13 +32,11 @@ type Credentials struct {
 type MyBot struct {
 	Bot      *tb.Bot
 	UserJoin map[int]*Credentials
-	members  map[int]int
 	retry    map[int]int
 }
 
 func init() {
 	pwd, _ = os.Getwd()
-	membersPath = pwd + "/members.json"
 	retryPath = pwd + "/retry.json"
 	token = flag.String("t", "", "token bot telegram")
 	wait = flag.Int64("w", 5, "lama menunggu jawaban")
@@ -50,13 +47,6 @@ func init() {
 func main() {
 	if *token == "" {
 		log.Fatal("Token harus diisi : -t <token>")
-	}
-
-	if _, err := os.Stat(membersPath); errors.Is(err, os.ErrNotExist) {
-		err := writeFile(membersPath, []byte(""))
-		if err != nil {
-			log.Panicf("error to write file : %v", err.Error())
-		}
 	}
 
 	if _, err := os.Stat(retryPath); errors.Is(err, os.ErrNotExist) {
@@ -85,10 +75,9 @@ func main() {
 
 	defer b.Stop()
 
-	myBot := MyBot{
+	myBot := &MyBot{
 		Bot:      b,
 		retry:    make(map[int]int),
-		members:  make(map[int]int),
 		UserJoin: make(map[int]*Credentials),
 	}
 
@@ -147,36 +136,41 @@ func main() {
 			return
 		}
 
-		members, _ := b.AdminsOf(m.Chat)
-
-		myBot.members = make(map[int]int)
-		for _, member := range members {
-			myBot.members[member.User.ID] = 1
-		}
-
-		if myBot.members[m.Sender.ID] == 1 {
+		cm, err2 := b.ChatMemberOf(m.Chat, m.Sender)
+		if err2 != nil {
 			return
 		}
-		myBot.retry[m.Sender.ID]++
+
+		if cm.Role == "administrator" || cm.Role == "creator" {
+			b.Delete(m)
+			msg := fmt.Sprintf("Selamat datang %v %v", m.UserJoined.FirstName, m.UserJoined.LastName)
+			b.Send(m.Chat, msg)
+			return
+		}
+
+		myBot.retry[m.UserJoined.ID]++
 		saveJson(myBot.retry, retryPath)
+
+		cm2, err2 := b.ChatMemberOf(m.Chat, m.UserJoined)
+		if err2 != nil {
+			return
+		}
+		cm2.RestrictedUntil = time.Now().Add(time.Duration(myBot.retry[m.UserJoined.ID]*5) * time.Minute).Unix()
+		cm2.CanSendMessages = true
+		err := b.Restrict(m.Chat, cm2)
+		if err != nil {
+			return
+		}
 
 		img, err := captcha.New(300, 100, func(o *captcha.Options) {
 			o.Noise = 3
 			o.CurveNumber = 13
 		})
-
 		credential := &Credentials{
 			User:   m.UserJoined,
 			Key:    img.Text,
 			Pesans: make([]*tb.Message, 0),
 			ch:     make(chan struct{}),
-		}
-
-		msl, err := json.Marshal(myBot.members)
-		err = writeFile(membersPath, msl)
-		if err != nil {
-			log.Panicln(err.Error())
-			return
 		}
 
 		pwd, _ := os.Getwd()
@@ -187,6 +181,7 @@ func main() {
 		defer func() {
 			file.Close()
 		}()
+
 		err = img.WriteImage(file)
 		if err != nil {
 			panic("failed to write img")
@@ -209,18 +204,17 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 			fmt.Println("failed to send msg :", err.Error())
 			return
 		}
-		myBot.UserJoin[m.Sender.ID] = credential
+		myBot.UserJoin[m.UserJoined.ID] = credential
 
 		// will race condition, but it's ok because we select it by sender id
-		go myBot.acceptOrDelete(m)
+		go myBot.acceptOrDelete(m, cm2)
 	})
 
 	b.Handle(tb.OnText, func(m *tb.Message) {
 		cred := myBot.UserJoin[m.Sender.ID]
-		if isNewUser(m, cred, &myBot) {
+		if isNewUser(cred) {
 			if m.Text == cred.Key {
 				b.Delete(m)
-				myBot.members[m.Sender.ID] = 1
 				cred.ch <- struct{}{}
 				return
 			}
@@ -250,45 +244,34 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 	b.Handle(tb.OnDocument, myBot.notText())
 	b.Handle(tb.OnContact, myBot.notText())
 	b.Handle(tb.OnSticker, myBot.notText())
+	b.Handle(tb.OnLocation, myBot.notText())
 
 	fmt.Println("bot started")
 	b.Start()
 
 }
 
-func (myBot *MyBot) acceptOrDelete(m *tb.Message) {
-	cred := myBot.UserJoin[m.Sender.ID]
+func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
+	cred := myBot.UserJoin[m.UserJoined.ID]
 	select {
 	case <-time.After(time.Duration(*wait) * time.Minute):
-		restrict := time.Now().Add(time.Duration(myBot.retry[m.Sender.ID]*5) * time.Minute).Unix()
-		cm := &tb.ChatMember{
-			User:            cred.User,
-			RestrictedUntil: restrict,
-		}
-		myBot.Bot.Ban(m.Chat, cm, true)
+		// restrict := time.Now().Add(time.Duration(myBot.retry[m.Sender.ID]*5) * time.Minute).Unix()
 
-		delete(myBot.members, cred.User.ID)
-		b1, err := json.Marshal(myBot.members)
+		err := myBot.Bot.Ban(m.Chat, cm, true)
 		if err != nil {
-			log.Panicf("failed to marshal : %v", err.Error())
+			fmt.Println("failed to ban user:", err.Error())
 		}
 
-		err = writeFile(membersPath, b1)
-		if err != nil {
-			log.Panicf("failed to write file : %v", err.Error())
-		}
 		cred.deleteMessages(myBot.Bot)
 		return
 
 	case <-cred.ch:
 		cred.deleteMessages(myBot.Bot)
-		delete(myBot.UserJoin, m.Sender.ID)
+		delete(myBot.UserJoin, m.UserJoined.ID)
 
 		msg := fmt.Sprintf("Selamat datang %v %v", cred.User.FirstName, cred.User.LastName)
 
-		saveJson(myBot.members, membersPath)
-
-		delete(myBot.retry, m.Sender.ID)
+		delete(myBot.retry, m.UserJoined.ID)
 		saveJson(myBot.retry, retryPath)
 
 		myBot.Bot.Send(m.Chat, msg)
@@ -314,14 +297,14 @@ func (myBot *MyBot) notText() func(m *tb.Message) {
 		}
 
 		cred := myBot.UserJoin[m.Sender.ID]
-		if isNewUser(m, cred, myBot) {
+		if isNewUser(cred) {
 			myBot.Bot.Delete(m)
 		}
 	}
 }
 
-func isNewUser(m *tb.Message, cred *Credentials, myBot *MyBot) bool {
-	return cred != nil && cred.Key != "" && myBot.members[m.Sender.ID] == 0
+func isNewUser(cred *Credentials) bool {
+	return cred != nil && cred.Key != ""
 }
 
 func writeFile(path string, data []byte) error {
