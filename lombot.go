@@ -150,7 +150,11 @@ func main() {
 		}
 
 		myBot.retry[m.UserJoined.ID]++
-		cm := myBot.restrictUser(m)
+		cm, err := myBot.restrictUser(m)
+		if err != nil {
+			fmt.Println("failed to restrict user:",err.Error())
+			return
+		}
 		saveFileJson(myBot.retry, retryPath)
 
 		img, err := captcha.New(300, 100, func(o *captcha.Options) {
@@ -246,7 +250,7 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 
 }
 
-func (myBot *MyBot) restrictUser(m *tb.Message) tb.ChatMember {
+func (myBot *MyBot) restrictUser(m *tb.Message) (tb.ChatMember, error){
 	cm, err := myBot.Bot.ChatMemberOf(m.Chat, m.UserJoined)
 	if err != nil {
 		fmt.Println("failed to get chat member:", err.Error())
@@ -256,9 +260,9 @@ func (myBot *MyBot) restrictUser(m *tb.Message) tb.ChatMember {
 	cm.CanSendMessages = true
 	err = myBot.Bot.Restrict(m.Chat, cm)
 	if err != nil {
-		fmt.Println("failed to restrict member:", err.Error())
+		return *cm, err
 	}
-	return *cm
+	return *cm, nil
 }
 
 func (myBot *MyBot) isSenderAdmin(m *tb.Message) bool {
