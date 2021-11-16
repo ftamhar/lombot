@@ -27,6 +27,7 @@ type Credentials struct {
 	Key    string
 	Pesans []*tb.Message
 	ch     chan struct{}
+	wait   time.Duration
 }
 
 type MyBot struct {
@@ -66,6 +67,7 @@ func main() {
 
 		// sync true to ensure all messages deleted properly
 		Synchronous: true,
+		// Verbose: true,
 	})
 
 	if err != nil {
@@ -98,7 +100,7 @@ func main() {
 		if !m.FromGroup() {
 			return
 		}
-		b.Send(m.Chat, fmt.Sprintf("Halo %v %v", m.Sender.FirstName, m.Sender.LastName))
+		b.Send(m.Chat, fmt.Sprintf("Halo %v %v! Berembe kabarm?", m.Sender.FirstName, m.Sender.LastName))
 	})
 
 	b.Handle("/id", func(m *tb.Message) {
@@ -136,44 +138,40 @@ func main() {
 			return
 		}
 
-		cm, err2 := b.ChatMemberOf(m.Chat, m.Sender)
-		if err2 != nil {
+		if time.Since(m.Time()) > 1*time.Hour {
 			return
 		}
 
-		if cm.Role == "administrator" || cm.Role == "creator" {
+		if myBot.isSenderAdmin(m) {
 			b.Delete(m)
 			msg := fmt.Sprintf("Selamat datang %v %v", m.UserJoined.FirstName, m.UserJoined.LastName)
 			b.Send(m.Chat, msg)
 			return
 		}
+		cm := myBot.restrictUser(m)
 
 		myBot.retry[m.UserJoined.ID]++
-		saveJson(myBot.retry, retryPath)
-
-		cm2, err2 := b.ChatMemberOf(m.Chat, m.UserJoined)
-		if err2 != nil {
-			return
-		}
-		cm2.RestrictedUntil = time.Now().Add(time.Duration(myBot.retry[m.UserJoined.ID]*5) * time.Minute).Unix()
-		cm2.CanSendMessages = true
-		err := b.Restrict(m.Chat, cm2)
-		if err != nil {
-			return
-		}
+		saveFileJson(myBot.retry, retryPath)
 
 		img, err := captcha.New(300, 100, func(o *captcha.Options) {
 			o.Noise = 3
 			o.CurveNumber = 13
 		})
+
 		credential := &Credentials{
 			User:   m.UserJoined,
 			Key:    img.Text,
 			Pesans: make([]*tb.Message, 0),
 			ch:     make(chan struct{}),
+			wait:   time.Duration(*wait) * time.Minute,
 		}
 
-		pwd, _ := os.Getwd()
+		if myBot.UserJoin[m.UserJoined.ID] != nil {
+			credential = myBot.UserJoin[m.UserJoined.ID]
+		} else {
+			myBot.UserJoin[m.UserJoined.ID] = credential
+		}
+
 		file, err := os.Create(pwd + "/c.png")
 		if err != nil {
 			panic("failed to open c.png")
@@ -192,22 +190,33 @@ func main() {
 
 		minfo := fmt.Sprintf(`
 Hai %v %v..!
-Tulis captcha dalam waktu %v menit.
+Tulis captcha di bawah dalam waktu %v menit.
 Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastName, *wait)
 
 		b.Delete(m)
 		info, err := b.Send(m.Chat, minfo)
-		cmsg, err := b.Send(m.Chat, cpt)
-		credential.Pesans = append(credential.Pesans, info)
-		credential.Pesans = append(credential.Pesans, cmsg)
 		if err != nil {
 			fmt.Println("failed to send msg :", err.Error())
+			// Immediately banned user, it's a spam
+			b.Ban(m.Chat, &tb.ChatMember{User: m.UserJoined}, true)
+			credential.deleteMessages(b)
 			return
 		}
-		myBot.UserJoin[m.UserJoined.ID] = credential
 
-		// will race condition, but it's ok because we select it by sender id
-		go myBot.acceptOrDelete(m, cm2)
+		cmsg, err := b.Send(m.Chat, cpt)
+		if err != nil {
+			fmt.Println("failed to send msg :", err.Error())
+			// Immediately banned user, it's a spam
+			b.Ban(m.Chat, &tb.ChatMember{User: m.UserJoined}, true)
+			credential.deleteMessages(b)
+			return
+		}
+
+		credential.Pesans = append(credential.Pesans, info)
+		credential.Pesans = append(credential.Pesans, cmsg)
+		// myBot.UserJoin[m.UserJoined.ID] = credential
+
+		go myBot.acceptOrDelete(m, &cm)
 	})
 
 	b.Handle(tb.OnText, func(m *tb.Message) {
@@ -219,12 +228,6 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 				return
 			}
 			b.Delete(m)
-			if len(cred.Pesans) < 2 {
-				send, _ := b.Send(m.Chat, "Anda salah memasukkan kode.\nHuruf besar dan kecil berpengaruh")
-				cred.Pesans = append(cred.Pesans, send)
-			} else {
-				b.Delete(m)
-			}
 		}
 	})
 
@@ -235,15 +238,7 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 		b.Delete(m)
 	})
 
-	b.Handle(tb.OnPhoto, myBot.notText())
-	b.Handle(tb.OnAnimation, myBot.notText())
-	b.Handle(tb.OnVoice, myBot.notText())
-	b.Handle(tb.OnVideo, myBot.notText())
-	b.Handle(tb.OnVideoNote, myBot.notText())
-	b.Handle(tb.OnDice, myBot.notText())
-	b.Handle(tb.OnDocument, myBot.notText())
 	b.Handle(tb.OnContact, myBot.notText())
-	b.Handle(tb.OnSticker, myBot.notText())
 	b.Handle(tb.OnLocation, myBot.notText())
 
 	fmt.Println("bot started")
@@ -251,12 +246,39 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 
 }
 
+func (myBot *MyBot) restrictUser(m *tb.Message) tb.ChatMember {
+	cm, err := myBot.Bot.ChatMemberOf(m.Chat, m.UserJoined)
+	if err != nil {
+		fmt.Println("failed to get chat member:", err.Error())
+	}
+
+	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.retry[m.UserJoined.ID]*5) * time.Minute).Unix()
+	cm.CanSendMessages = true
+	err = myBot.Bot.Restrict(m.Chat, cm)
+	if err != nil {
+		fmt.Println("failed to restrict member:", err.Error())
+	}
+	return *cm
+}
+
+func (myBot *MyBot) isSenderAdmin(m *tb.Message) bool {
+	admins, err := myBot.Bot.AdminsOf(m.Chat)
+	if err != nil {
+		return false
+	}
+
+	for _, v := range admins {
+		if v.User.ID == m.Sender.ID {
+			return true
+		}
+	}
+	return false
+}
+
 func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
 	cred := myBot.UserJoin[m.UserJoined.ID]
 	select {
-	case <-time.After(time.Duration(*wait) * time.Minute):
-		// restrict := time.Now().Add(time.Duration(myBot.retry[m.Sender.ID]*5) * time.Minute).Unix()
-
+	case <-time.After(cred.wait):
 		err := myBot.Bot.Ban(m.Chat, cm, true)
 		if err != nil {
 			fmt.Println("failed to ban user:", err.Error())
@@ -272,14 +294,14 @@ func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
 		msg := fmt.Sprintf("Selamat datang %v %v", cred.User.FirstName, cred.User.LastName)
 
 		delete(myBot.retry, m.UserJoined.ID)
-		saveJson(myBot.retry, retryPath)
+		saveFileJson(myBot.retry, retryPath)
 
 		myBot.Bot.Send(m.Chat, msg)
 		return
 	}
 }
 
-func saveJson(data interface{}, path string) {
+func saveFileJson(data interface{}, path string) {
 	b1, err := json.Marshal(data)
 	if err != nil {
 		log.Panicf("failed to marshal : %v", err.Error())
