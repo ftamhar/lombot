@@ -148,9 +148,9 @@ func main() {
 			b.Send(m.Chat, msg)
 			return
 		}
-		cm := myBot.restrictUser(m)
 
 		myBot.retry[m.UserJoined.ID]++
+		cm := myBot.restrictUser(m)
 		saveFileJson(myBot.retry, retryPath)
 
 		img, err := captcha.New(300, 100, func(o *captcha.Options) {
@@ -252,7 +252,7 @@ func (myBot *MyBot) restrictUser(m *tb.Message) tb.ChatMember {
 		fmt.Println("failed to get chat member:", err.Error())
 	}
 
-	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.retry[m.UserJoined.ID]*5) * time.Minute).Unix()
+	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.retry[m.UserJoined.ID]*5) * time.Minute).Add(time.Duration(*wait) * time.Minute).Unix()
 	cm.CanSendMessages = true
 	err = myBot.Bot.Restrict(m.Chat, cm)
 	if err != nil {
