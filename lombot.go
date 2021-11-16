@@ -20,6 +20,7 @@ var (
 	retryPath string
 	token     *string
 	wait      *int64
+	ignore    *int64
 )
 
 type Credentials struct {
@@ -41,11 +42,12 @@ func init() {
 	retryPath = pwd + "/retry.json"
 	token = flag.String("t", "", "token bot telegram")
 	wait = flag.Int64("w", 5, "lama menunggu jawaban")
+	ignore = flag.Int64("i", 60, "lama mengabaikan chat")
 
-	flag.Parse()
 }
 
 func main() {
+	flag.Parse()
 	if *token == "" {
 		log.Fatal("Token harus diisi : -t <token>")
 	}
@@ -57,13 +59,24 @@ func main() {
 		}
 	}
 
+	poller := &tb.LongPoller{Timeout: 10 * time.Second}
+
+	middleware := tb.NewMiddlewarePoller(poller, func(u *tb.Update) bool {
+		// ignore chat in (*ignore) time
+		if time.Since(u.Message.Time()) > time.Duration(*ignore)*time.Second {
+			return false
+		}
+		return true
+	})
+
 	b, err := tb.NewBot(tb.Settings{
 		// You can also set custom API URL.
 		// If field is empty it equals to "https://api.telegram.org".
 		// URL: "http://195.129.111.17:8012",
 
-		Token:  *token,
-		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
+		Token: *token,
+		// Poller: &tb.LongPoller{Timeout: 10 * time.Second},
+		Poller: middleware,
 
 		// sync true to ensure all messages deleted properly
 		Synchronous: true,
@@ -151,10 +164,6 @@ func main() {
 			return
 		}
 
-		if time.Since(m.Time()) > 1*time.Hour {
-			return
-		}
-
 		if myBot.isSenderAdmin(m) {
 			b.Delete(m)
 			msg := fmt.Sprintf("Selamat datang %v %v", m.UserJoined.FirstName, m.UserJoined.LastName)
@@ -232,7 +241,6 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 
 		credential.Pesans = append(credential.Pesans, info)
 		credential.Pesans = append(credential.Pesans, cmsg)
-		// myBot.UserJoin[m.UserJoined.ID] = credential
 
 		go myBot.acceptOrDelete(m, &cm)
 	})

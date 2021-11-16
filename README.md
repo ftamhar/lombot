@@ -6,6 +6,7 @@ Project bot telegram sederhana dan suka-suka untuk mengisi waktu luang.
 
     -t : Token API telegram (required)
     -w : Lama menunggu jawaban (menit) (default 5)
+    -i : Lama mengabaikan pesan (detik) (default 60)
 
 ## Usage
 ```shell
