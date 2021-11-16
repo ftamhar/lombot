@@ -97,7 +97,11 @@ func main() {
 	}
 
 	b.Handle("/Bismillah", func(m *tb.Message) {
-		b.Send(m.Sender, "MasyaaAllah Tabarakallah")
+		if !m.FromGroup() {
+			b.Send(m.Sender, "MasyaaAllah Tabarakallah")
+			return
+		}
+		b.Send(m.Chat, "MasyaaAllah Tabarakallah")
 	})
 
 	b.Handle("/halo", func(m *tb.Message) {
@@ -156,7 +160,7 @@ func main() {
 		myBot.retry[m.UserJoined.ID]++
 		cm, err := myBot.restrictUser(m)
 		if err != nil {
-			fmt.Println("failed to restrict user:",err.Error())
+			fmt.Println("failed to restrict user:", err.Error())
 			return
 		}
 		saveFileJson(myBot.retry, retryPath)
@@ -254,7 +258,7 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 
 }
 
-func (myBot *MyBot) restrictUser(m *tb.Message) (tb.ChatMember, error){
+func (myBot *MyBot) restrictUser(m *tb.Message) (tb.ChatMember, error) {
 	cm, err := myBot.Bot.ChatMemberOf(m.Chat, m.UserJoined)
 	if err != nil {
 		fmt.Println("failed to get chat member:", err.Error())
