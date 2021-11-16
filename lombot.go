@@ -96,6 +96,10 @@ func main() {
 		}
 	}
 
+	b.Handle("/Bismillah", func(m *tb.Message) {
+		b.Send(m.Sender, "MasyaaAllah Tabarakallah")
+	})
+
 	b.Handle("/halo", func(m *tb.Message) {
 		if !m.FromGroup() {
 			return
