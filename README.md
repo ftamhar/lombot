@@ -8,6 +8,7 @@ Project bot telegram sederhana dan suka-suka untuk mengisi waktu luang.
     -u : Username pengelola bot (required)
     -w : Lama menunggu jawaban (menit) (default 5)
     -i : Lama mengabaikan pesan (detik) (default 60)
+    -v : Mode debug (boolean) (default false)
 
 ## Usage
 ```shell
