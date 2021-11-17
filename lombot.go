@@ -19,6 +19,7 @@ var (
 	pwd       string
 	retryPath string
 	token     *string
+	superUser *string
 	wait      *int64
 	ignore    *int64
 )
@@ -40,15 +41,19 @@ type MyBot struct {
 func init() {
 	pwd, _ = os.Getwd()
 	retryPath = pwd + "/retry.json"
-	token = flag.String("t", "", "token bot telegram")
-	wait = flag.Int64("w", 5, "lama menunggu jawaban")
-	ignore = flag.Int64("i", 60, "lama mengabaikan chat")
+	token = flag.String("t", "", "token bot telegram (required)")
+	superUser = flag.String("u", "", "username pengelola bot (required)")
+	wait = flag.Int64("w", 5, "lama menunggu jawaban (menit)")
+	ignore = flag.Int64("i", 60, "lama mengabaikan chat (detik)")
 }
 
 func main() {
 	flag.Parse()
 	if *token == "" {
 		log.Fatal("Token harus diisi : -t <token>")
+	}
+	if *superUser == "" {
+		log.Fatal("username pengelola bot harus diisi : -u <username>")
 	}
 
 	if _, err := os.Stat(retryPath); errors.Is(err, os.ErrNotExist) {
@@ -112,14 +117,16 @@ func main() {
 	}
 
 	b.Handle("/Bismillah", func(m *tb.Message) {
-		if !m.FromGroup() {
-			send, _ := b.Send(m.Sender, "MasyaaAllah Tabarakallah")
+		if m.FromGroup() {
+			send, _ := b.Send(m.Chat, "MasyaaAllah Tabarakallah")
 			go myBot.deleteChat(m, 60)
 			go myBot.deleteChat(send, 63)
 			return
 		}
-		send, _ := b.Send(m.Chat, "MasyaaAllah Tabarakallah")
-
+		if !isSuperUser(m.Sender.Username) {
+			return
+		}
+		send, _ := b.Send(m.Sender, "MasyaaAllah Tabarakallah")
 		go myBot.deleteChat(m, 60)
 		go myBot.deleteChat(send, 63)
 	})
@@ -273,6 +280,10 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 	fmt.Println("bot started")
 	b.Start()
 
+}
+
+func isSuperUser(username string) bool {
+	return username == *superUser
 }
 
 func (myBot *MyBot) deleteChat(m *tb.Message, t time.Duration) {
