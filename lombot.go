@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	tb "gopkg.in/tucnak/telebot.v2"
@@ -165,7 +166,7 @@ func main() {
 		if !m.FromGroup() {
 			return
 		}
-		b.Send(m.Chat, fmt.Sprintf("Halo %v %v! Berembe kabarm?", m.Sender.FirstName, m.Sender.LastName))
+		b.Send(m.Chat, fmt.Sprintf("Halo %v! Berembe kabarm?", getFullName(m.Sender.FirstName, m.Sender.LastName)))
 	})
 
 	b.Handle("/id", func(m *tb.Message) {
@@ -174,7 +175,7 @@ func main() {
 		if !m.FromGroup() {
 			return
 		}
-		msg := fmt.Sprintf("%s %s, ID Anda adalah %d", m.Sender.FirstName, m.Sender.LastName, m.Sender.ID)
+		msg := fmt.Sprintf("%v, ID Anda adalah %d", getFullName(m.Sender.FirstName, m.Sender.LastName), m.Sender.ID)
 		b.Send(m.Chat, msg)
 	})
 
@@ -206,7 +207,7 @@ func main() {
 		b.Delete(m)
 
 		if myBot.isSenderAdmin(m) {
-			msg := fmt.Sprintf("Selamat datang %v %v", m.UserJoined.FirstName, m.UserJoined.LastName)
+			msg := fmt.Sprintf("Selamat datang %v", getFullName(m.UserJoined.FirstName, m.UserJoined.LastName))
 			b.Send(m.Chat, msg)
 			return
 		}
@@ -257,9 +258,9 @@ func main() {
 		}
 
 		minfo := fmt.Sprintf(`
-Hai %v %v..!
+Hai %v..!
 Tulis captcha di bawah dalam waktu %v menit.
-Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastName, *wait)
+Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJoined.LastName), *wait)
 
 		info, err := b.Send(m.Chat, minfo)
 		if err != nil {
@@ -310,6 +311,10 @@ Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastNam
 	fmt.Println("bot started")
 	b.Start()
 
+}
+
+func getFullName(f, l string) string {
+	return strings.Trim(fmt.Sprintf("%v %v", f, l), " ")
 }
 
 func isSuperUser(username string) bool {
