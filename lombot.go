@@ -43,7 +43,6 @@ func init() {
 	token = flag.String("t", "", "token bot telegram")
 	wait = flag.Int64("w", 5, "lama menunggu jawaban")
 	ignore = flag.Int64("i", 60, "lama mengabaikan chat")
-
 }
 
 func main() {
@@ -62,6 +61,9 @@ func main() {
 	poller := &tb.LongPoller{Timeout: 10 * time.Second}
 
 	middleware := tb.NewMiddlewarePoller(poller, func(u *tb.Update) bool {
+		if u.Message == nil {
+			return true
+		}
 		// ignore chat in (*ignore) time
 		if time.Since(u.Message.Time()) > time.Duration(*ignore)*time.Second {
 			return false
@@ -164,10 +166,16 @@ func main() {
 			return
 		}
 
+		b.Delete(m)
+
 		if myBot.isSenderAdmin(m) {
-			b.Delete(m)
 			msg := fmt.Sprintf("Selamat datang %v %v", m.UserJoined.FirstName, m.UserJoined.LastName)
 			b.Send(m.Chat, msg)
+			return
+		}
+
+		credential, ok := myBot.UserJoin[m.UserJoined.ID]
+		if ok {
 			return
 		}
 
@@ -185,7 +193,7 @@ func main() {
 			o.CurveNumber = 13
 		})
 
-		credential := &Credentials{
+		credential = &Credentials{
 			User:   m.UserJoined,
 			Key:    img.Text,
 			Pesans: make([]*tb.Message, 0),
@@ -193,11 +201,7 @@ func main() {
 			wait:   time.Duration(*wait) * time.Minute,
 		}
 
-		if myBot.UserJoin[m.UserJoined.ID] != nil {
-			credential = myBot.UserJoin[m.UserJoined.ID]
-		} else {
-			myBot.UserJoin[m.UserJoined.ID] = credential
-		}
+		myBot.UserJoin[m.UserJoined.ID] = credential
 
 		file, err := os.Create(pwd + "/c.png")
 		if err != nil {
@@ -220,7 +224,6 @@ Hai %v %v..!
 Tulis captcha di bawah dalam waktu %v menit.
 Huruf besar dan kecil berpengaruh`, m.UserJoined.FirstName, m.UserJoined.LastName, *wait)
 
-		b.Delete(m)
 		info, err := b.Send(m.Chat, minfo)
 		if err != nil {
 			fmt.Println("failed to send msg :", err.Error())
@@ -318,6 +321,7 @@ func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
 		}
 
 		cred.deleteMessages(myBot.Bot)
+		delete(myBot.UserJoin, m.UserJoined.ID)
 		return
 
 	case <-cred.ch:
