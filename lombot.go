@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/rs/zerolog"
 	"github.com/steambap/captcha"
 	"io/fs"
 	"io/ioutil"
@@ -22,6 +23,7 @@ var (
 	superUser *string
 	wait      *int64
 	ignore    *int64
+	verbose   bool
 )
 
 type Credentials struct {
@@ -45,6 +47,17 @@ func init() {
 	superUser = flag.String("u", "", "username pengelola bot (required)")
 	wait = flag.Int64("w", 5, "lama menunggu jawaban (menit)")
 	ignore = flag.Int64("i", 60, "lama mengabaikan chat (detik)")
+
+	flag.Func("v", "mode debug (boolean) (default false)", func(s string) error {
+		if s != "true" && s != "false" {
+			return errors.New("wrong format, must be \"true\" or \"false\"")
+		}
+		if s == "true" {
+			verbose = true
+			return nil
+		}
+		return nil
+	})
 }
 
 func main() {
@@ -75,6 +88,14 @@ func main() {
 		}
 		return true
 	})
+	fileLogger, err := os.OpenFile("./logger.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	defer fileLogger.Close()
+
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	myLogger := zerolog.New(fileLogger).With().Timestamp().Caller().Logger()
 
 	b, err := tb.NewBot(tb.Settings{
 		// You can also set custom API URL.
@@ -87,7 +108,10 @@ func main() {
 
 		// sync true to ensure all messages deleted properly
 		Synchronous: true,
-		// Verbose: true,
+		Reporter: func(err error) {
+			myLogger.Error().Msg(err.Error())
+		},
+		Verbose: verbose,
 	})
 
 	if err != nil {
@@ -96,6 +120,13 @@ func main() {
 	}
 
 	defer b.Stop()
+
+	defer func() {
+		if r := recover(); r != nil {
+			msg := fmt.Sprintf("Type : %T; Value : %v", r, r)
+			myLogger.Error().Msg(msg)
+		}
+	}()
 
 	myBot := &MyBot{
 		Bot:      b,
@@ -120,7 +151,7 @@ func main() {
 		if m.FromGroup() {
 			send, _ := b.Send(m.Chat, "MasyaaAllah Tabarakallah")
 			go myBot.deleteChat(m, 60)
-			go myBot.deleteChat(send, 63)
+			go myBot.deleteChat(send, 60)
 			return
 		}
 		if !isSuperUser(m.Sender.Username) {
@@ -128,7 +159,7 @@ func main() {
 		}
 		send, _ := b.Send(m.Sender, "MasyaaAllah Tabarakallah")
 		go myBot.deleteChat(m, 60)
-		go myBot.deleteChat(send, 63)
+		go myBot.deleteChat(send, 60)
 	})
 
 	b.Handle("/halo", func(m *tb.Message) {
