@@ -266,7 +266,7 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 		if err != nil {
 			fmt.Println("failed to send msg :", err.Error())
 			// Immediately banned user, it's a spam
-			b.Ban(m.Chat, &tb.ChatMember{User: m.UserJoined}, true)
+			b.Ban(m.Chat, &tb.ChatMember{User: m.UserJoined, RestrictedUntil: tb.Forever()}, true)
 			credential.deleteMessages(b)
 			return
 		}
@@ -275,7 +275,7 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 		if err != nil {
 			fmt.Println("failed to send msg :", err.Error())
 			// Immediately banned user, it's a spam
-			b.Ban(m.Chat, &tb.ChatMember{User: m.UserJoined}, true)
+			b.Ban(m.Chat, &tb.ChatMember{User: m.UserJoined, RestrictedUntil: tb.Forever()}, true)
 			credential.deleteMessages(b)
 			return
 		}
