@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/rs/zerolog"
 	"github.com/steambap/captcha"
-	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
@@ -409,7 +408,7 @@ func isNewUser(cred *Credentials) bool {
 }
 
 func writeFile(path string, data []byte) error {
-	return ioutil.WriteFile(path, data, fs.ModePerm)
+	return ioutil.WriteFile(path, data, 0666)
 }
 
 func (cred *Credentials) deleteMessages(b *tb.Bot) {
