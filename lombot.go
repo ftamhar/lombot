@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	tb "gopkg.in/tucnak/telebot.v2"
@@ -24,6 +25,7 @@ var (
 	wait      *int64
 	ignore    *int64
 	verbose   bool
+	mutex     sync.Mutex
 )
 
 type Credentials struct {
@@ -41,6 +43,7 @@ type MyBot struct {
 }
 
 func init() {
+	mutex = sync.Mutex{}
 	pwd, _ = os.Getwd()
 	retryPath = pwd + "/retry.json"
 	token = flag.String("t", "", "token bot telegram (required)")
@@ -239,7 +242,9 @@ func main() {
 			wait:   time.Duration(*wait) * time.Minute,
 		}
 
+		mutex.Lock()
 		myBot.UserJoin[m.UserJoined.ID] = credential
+		mutex.Unlock()
 
 		file, err := os.Create(pwd + "/c.png")
 		if err != nil {
@@ -287,8 +292,10 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 	})
 
 	b.Handle(tb.OnText, func(m *tb.Message) {
-		cred := myBot.UserJoin[m.Sender.ID]
-		if isNewUser(cred) {
+		mutex.Lock()
+		cred, ok := myBot.UserJoin[m.Sender.ID]
+		mutex.Unlock()
+		if ok {
 			if m.Text == cred.Key {
 				b.Delete(m)
 				cred.ch <- struct{}{}
@@ -358,7 +365,9 @@ func (myBot *MyBot) isSenderAdmin(m *tb.Message) bool {
 }
 
 func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
+	mutex.Lock()
 	cred := myBot.UserJoin[m.UserJoined.ID]
+	mutex.Unlock()
 	select {
 	case <-time.After(cred.wait):
 		err := myBot.Bot.Ban(m.Chat, cm, true)
@@ -367,16 +376,22 @@ func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
 		}
 
 		cred.deleteMessages(myBot.Bot)
+		mutex.Lock()
 		delete(myBot.UserJoin, m.UserJoined.ID)
+		mutex.Unlock()
 		return
 
 	case <-cred.ch:
 		cred.deleteMessages(myBot.Bot)
+		mutex.Lock()
 		delete(myBot.UserJoin, m.UserJoined.ID)
+		mutex.Unlock()
 
 		msg := fmt.Sprintf("Selamat datang %v %v", cred.User.FirstName, cred.User.LastName)
 
+		mutex.Lock()
 		delete(myBot.retry, m.UserJoined.ID)
+		mutex.Unlock()
 		saveFileJson(myBot.retry, retryPath)
 
 		myBot.Bot.Send(m.Chat, msg)
@@ -401,15 +416,11 @@ func (myBot *MyBot) notText() func(m *tb.Message) {
 			return
 		}
 
-		cred := myBot.UserJoin[m.Sender.ID]
-		if isNewUser(cred) {
+		_, ok := myBot.UserJoin[m.Sender.ID]
+		if ok {
 			myBot.Bot.Delete(m)
 		}
 	}
-}
-
-func isNewUser(cred *Credentials) bool {
-	return cred != nil && cred.Key != ""
 }
 
 func writeFile(path string, data []byte) error {

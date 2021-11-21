@@ -4,6 +4,7 @@ c.png
 .env
 build
 logger.log
+vendor
 
 # Created by https://www.toptal.com/developers/gitignore/api/goland,visualstudiocode,macos,linux,windows
 # Edit at https://www.toptal.com/developers/gitignore?templates=goland,visualstudiocode,macos,linux,windows
