@@ -165,6 +165,25 @@ func main() {
 		go myBot.deleteChat(send, 60)
 	})
 
+	b.Handle("/admin", func(m *tb.Message) {
+		if !m.FromGroup() {
+			return
+		}
+		b.Delete(m)
+		admins, err := b.AdminsOf(m.Chat)
+		if err != nil {
+			panic("failed to get admin")
+		}
+		res := ""
+		for _, admin := range admins {
+			if !admin.User.IsBot {
+				res += "@" + admin.User.Username + " "
+			}
+		}
+		send, _ := b.Send(m.Chat, "Ping "+res)
+		myBot.deleteChat(send, 60*30)
+	})
+
 	b.Handle("/halo", func(m *tb.Message) {
 		if !m.FromGroup() {
 			return
