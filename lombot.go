@@ -176,7 +176,7 @@ func main() {
 		}
 		res := ""
 		for _, admin := range admins {
-			if !admin.User.IsBot {
+			if !admin.User.IsBot && admin.User.Username != "" {
 				res += "@" + admin.User.Username + " "
 			}
 		}
