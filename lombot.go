@@ -181,7 +181,7 @@ func main() {
 			}
 		}
 		send, _ := b.Send(m.Chat, "Ping "+res)
-		myBot.deleteChat(send, 60*30)
+		go myBot.deleteChat(send, 60*30)
 	})
 
 	b.Handle("/halo", func(m *tb.Message) {
