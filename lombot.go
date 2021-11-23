@@ -153,16 +153,16 @@ func main() {
 	b.Handle("/Bismillah", func(m *tb.Message) {
 		if m.FromGroup() {
 			send, _ := b.Send(m.Chat, "MasyaaAllah Tabarakallah")
-			go myBot.deleteChat(m, 60)
-			go myBot.deleteChat(send, 60)
+			go myBot.deleteChat(m, 60*time.Second)
+			go myBot.deleteChat(send, 60*time.Second)
 			return
 		}
 		if !isSuperUser(m.Sender.Username) {
 			return
 		}
 		send, _ := b.Send(m.Sender, "MasyaaAllah Tabarakallah")
-		go myBot.deleteChat(m, 60)
-		go myBot.deleteChat(send, 60)
+		go myBot.deleteChat(m, 60*time.Second)
+		go myBot.deleteChat(send, 60*time.Second)
 	})
 
 	b.Handle("/admin", func(m *tb.Message) {
@@ -181,7 +181,7 @@ func main() {
 			}
 		}
 		send, _ := b.Send(m.Chat, "Ping "+res)
-		go myBot.deleteChat(send, 60*30)
+		go myBot.deleteChat(send, 30*time.Minute)
 	})
 
 	b.Handle("/halo", func(m *tb.Message) {
@@ -243,7 +243,7 @@ func main() {
 		cm, err := myBot.restrictUser(m)
 		if err != nil {
 			send, _ := b.Send(m.Chat, "Hai Admin, tolong jadikan saya admin agar dapat mengirim captcha 🙏")
-			go myBot.deleteChat(send, 60)
+			go myBot.deleteChat(send, 30*time.Minute)
 			return
 		}
 		saveFileJson(myBot.retry, retryPath)
@@ -349,7 +349,7 @@ func isSuperUser(username string) bool {
 
 func (myBot *MyBot) deleteChat(m *tb.Message, t time.Duration) {
 	select {
-	case <-time.After(t * time.Second):
+	case <-time.After(t):
 		myBot.Bot.Delete(m)
 	}
 }
