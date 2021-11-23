@@ -37,9 +37,10 @@ type Credentials struct {
 }
 
 type MyBot struct {
-	Bot      *tb.Bot
-	UserJoin map[int]*Credentials
-	retry    map[int]int
+	Bot            *tb.Bot
+	UserJoin       map[int]*Credentials
+	retry          map[int]int
+	hasReportAdmin bool
 }
 
 func init() {
@@ -170,6 +171,15 @@ func main() {
 			return
 		}
 		b.Delete(m)
+		mutex.Lock()
+		status := myBot.hasReportAdmin
+		mutex.Unlock()
+		if status {
+			return
+		}
+		mutex.Lock()
+		myBot.hasReportAdmin = true
+		mutex.Unlock()
 		admins, err := b.AdminsOf(m.Chat)
 		if err != nil {
 			panic("failed to get admin")
@@ -181,7 +191,16 @@ func main() {
 			}
 		}
 		send, _ := b.Send(m.Chat, "Ping "+res)
-		go myBot.deleteChat(send, 30*time.Minute)
+		t := 30*time.Minute
+		go myBot.deleteChat(send, t)
+		go func(t time.Duration) {
+			select {
+			case <-time.After(t):
+				mutex.Lock()
+				myBot.hasReportAdmin = false
+				mutex.Unlock()
+			}
+		}(t)
 	})
 
 	b.Handle("/halo", func(m *tb.Message) {
