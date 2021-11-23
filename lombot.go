@@ -44,7 +44,6 @@ type MyBot struct {
 }
 
 func init() {
-	mutex = sync.Mutex{}
 	pwd, _ = os.Getwd()
 	retryPath = pwd + "/retry.json"
 	token = flag.String("t", "", "token bot telegram (required)")
@@ -186,12 +185,15 @@ func main() {
 		}
 		res := ""
 		for _, admin := range admins {
+			if admin.User.Username == m.Sender.Username {
+				return
+			}
 			if !admin.User.IsBot && admin.User.Username != "" {
 				res += "@" + admin.User.Username + " "
 			}
 		}
 		send, _ := b.Send(m.Chat, "Ping "+res)
-		t := 30*time.Minute
+		t := 30 * time.Minute
 		go myBot.deleteChat(send, t)
 		go func(t time.Duration) {
 			select {
@@ -248,8 +250,10 @@ func main() {
 		b.Delete(m)
 
 		if myBot.isSenderAdmin(m) {
-			msg := fmt.Sprintf("Selamat datang %v", getFullName(m.UserJoined.FirstName, m.UserJoined.LastName))
-			b.Send(m.Chat, msg)
+			if !m.UserJoined.IsBot {
+				msg := fmt.Sprintf("Selamat datang %v", getFullName(m.UserJoined.FirstName, m.UserJoined.LastName))
+				b.Send(m.Chat, msg)
+			}
 			return
 		}
 
