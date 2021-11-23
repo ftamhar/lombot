@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/steambap/captcha"
 	"io/ioutil"
@@ -257,7 +258,9 @@ func main() {
 			return
 		}
 
+		mutex.Lock()
 		credential, ok := myBot.UserJoin[m.UserJoined.ID]
+		mutex.Unlock()
 		if ok {
 			return
 		}
@@ -271,14 +274,8 @@ func main() {
 		}
 		saveFileJson(myBot.retry, retryPath)
 
-		img, err := captcha.New(300, 100, func(o *captcha.Options) {
-			o.Noise = 3
-			o.CurveNumber = 13
-		})
-
 		credential = &Credentials{
 			User:   m.UserJoined,
-			Key:    img.Text,
 			Pesans: make([]*tb.Message, 0),
 			ch:     make(chan struct{}),
 			wait:   time.Duration(*wait) * time.Minute,
@@ -288,21 +285,14 @@ func main() {
 		myBot.UserJoin[m.UserJoined.ID] = credential
 		mutex.Unlock()
 
-		file, err := os.Create(pwd + "/c.png")
+		imgCaptcha, key, path, err := getCaptcha()
 		if err != nil {
-			panic("failed to open c.png")
+			panic(err.Error())
 		}
-		defer func() {
-			file.Close()
-		}()
 
-		err = img.WriteImage(file)
-		if err != nil {
-			panic("failed to write img")
-		}
-		cpt := &tb.Photo{
-			File: tb.FromDisk(pwd + "/c.png"),
-		}
+		defer func() {
+			os.Remove(path)
+		}()
 
 		minfo := fmt.Sprintf(`
 Hai %v..!
@@ -318,7 +308,7 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 			return
 		}
 
-		cmsg, err := b.Send(m.Chat, cpt)
+		captchaMessage, err := b.Send(m.Chat, &imgCaptcha)
 		if err != nil {
 			fmt.Println("failed to send msg :", err.Error())
 			// Immediately banned user, it's a spam
@@ -327,8 +317,9 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 			return
 		}
 
+		credential.Key = key
 		credential.Pesans = append(credential.Pesans, info)
-		credential.Pesans = append(credential.Pesans, cmsg)
+		credential.Pesans = append(credential.Pesans, captchaMessage)
 
 		go myBot.acceptOrDelete(m, &cm)
 	})
@@ -344,6 +335,19 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 				return
 			}
 			b.Delete(m)
+
+			imgCaptcha, key, path, err := getCaptcha()
+			if err != nil {
+				panic(err.Error())
+			}
+			defer func() {
+				os.Remove(path)
+			}()
+
+			b.Edit(cred.Pesans[1], &imgCaptcha)
+			mutex.Lock()
+			myBot.UserJoin[m.Sender.ID].Key = key
+			mutex.Unlock()
 		}
 	})
 
@@ -359,7 +363,30 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 
 	fmt.Println("bot started")
 	b.Start()
+}
 
+func getCaptcha() (tb.Photo, string, string, error) {
+	img, err := captcha.New(300, 100, func(o *captcha.Options) {
+		o.Noise = 3
+		o.CurveNumber = 13
+	})
+	filename := uuid.New()
+	path := pwd + "/" + filename.String() + ".png"
+	file, err := os.Create(path)
+	if err != nil {
+		return tb.Photo{}, "", "", errors.New("failed to open c.png")
+	}
+	defer func() {
+		file.Close()
+	}()
+
+	err = img.WriteImage(file)
+	if err != nil {
+		return tb.Photo{}, "", "", errors.New("failed to write img")
+	}
+	return tb.Photo{
+		File: tb.FromDisk(path),
+	}, img.Text, path, nil
 }
 
 func getFullName(f, l string) string {

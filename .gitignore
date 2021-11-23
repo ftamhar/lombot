@@ -1,6 +1,6 @@
 members.json
 retry.json
-c.png
+*.png
 .env
 build
 logger.log
