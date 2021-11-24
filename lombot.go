@@ -35,6 +35,7 @@ type Credentials struct {
 	Pesans []*tb.Message
 	ch     chan struct{}
 	wait   time.Duration
+	retry  uint8
 }
 
 type MyBot struct {
@@ -359,6 +360,17 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 			}
 			b.Delete(m)
 
+			if cred.retry < 2 {
+				mutex.Lock()
+				cred.retry++
+				mutex.Unlock()
+				return
+			}
+
+			mutex.Lock()
+			cred.retry = 0
+			mutex.Unlock()
+
 			imgCaptcha, key, path, err := getCaptcha()
 			if err != nil {
 				panic(err.Error())
@@ -369,7 +381,7 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 
 			b.Edit(cred.Pesans[1], &imgCaptcha)
 			mutex.Lock()
-			myBot.UserJoin[m.Sender.ID].Key = key
+			cred.Key = key
 			mutex.Unlock()
 		}
 	})
