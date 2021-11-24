@@ -206,6 +206,26 @@ func main() {
 		}(t)
 	})
 
+	b.Handle("/ban", func(m *tb.Message) {
+		b.Delete(m)
+		if !m.FromGroup() {
+			return
+		}
+		if !myBot.isSenderAdmin(m) {
+			return
+		}
+		cm, err := b.ChatMemberOf(m.Chat, m.ReplyTo.Sender)
+		if err != nil {
+			panic("failed to get chat member: " + err.Error())
+		}
+		cm.RestrictedUntil = tb.Forever()
+		err = b.Ban(m.Chat, cm)
+		if err != nil {
+			panic(err.Error())
+		}
+		b.Delete(m.ReplyTo)
+	})
+
 	b.Handle("/halo", func(m *tb.Message) {
 		if !m.FromGroup() {
 			return
