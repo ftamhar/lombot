@@ -193,7 +193,7 @@ func main() {
 				res += "@" + admin.User.Username + " "
 			}
 		}
-		send, _ := b.Send(m.Chat, "Ping "+res)
+		send, _ := b.Send(m.Chat, "Ping <b>"+res+"</b>", tb.ModeHTML)
 		t := 30 * time.Minute
 		go myBot.deleteChat(send, t)
 		go func(t time.Duration) {
@@ -233,7 +233,7 @@ func main() {
 		if !m.FromGroup() {
 			return
 		}
-		b.Send(m.Chat, fmt.Sprintf("Halo %v! Berembe kabarm?", getFullName(m.Sender.FirstName, m.Sender.LastName)))
+		b.Send(m.Chat, fmt.Sprintf("Halo <b>%v!</b> Berembe kabarm?", getFullName(m.Sender.FirstName, m.Sender.LastName)), tb.ModeHTML)
 	})
 
 	b.Handle("/id", func(m *tb.Message) {
@@ -479,14 +479,14 @@ func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
 		delete(myBot.UserJoin, m.UserJoined.ID)
 		mutex.Unlock()
 
-		msg := fmt.Sprintf("Selamat datang %v %v", cred.User.FirstName, cred.User.LastName)
+		msg := fmt.Sprintf(`Selamat datang <b><a href="tg://user?id=%v">%v</a></b>`, cred.User.ID, getFullName(cred.User.FirstName, cred.User.LastName))
 
 		mutex.Lock()
 		delete(myBot.retry, m.UserJoined.ID)
 		mutex.Unlock()
 		saveFileJson(myBot.retry, retryPath)
 
-		myBot.Bot.Send(m.Chat, msg)
+		myBot.Bot.Send(m.Chat, msg, tb.ModeHTML)
 		return
 	}
 }
