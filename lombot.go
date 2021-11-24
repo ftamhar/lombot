@@ -214,6 +214,9 @@ func main() {
 		if !myBot.isSenderAdmin(m) {
 			return
 		}
+		if m.ReplyTo.Sender == nil {
+			return
+		}
 		cm, err := b.ChatMemberOf(m.Chat, m.ReplyTo.Sender)
 		if err != nil {
 			panic("failed to get chat member: " + err.Error())
