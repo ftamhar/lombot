@@ -5,15 +5,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/rs/zerolog"
-	"github.com/steambap/captcha"
 	"io/ioutil"
 	"log"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/rs/zerolog"
+	"github.com/steambap/captcha"
 
 	tb "gopkg.in/tucnak/telebot.v2"
 )
@@ -486,6 +487,10 @@ func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
 		return
 
 	case <-cred.ch:
+
+		cm.RestrictedUntil = time.Now().Add(31 * time.Second).Unix() // if less than 30 seconds, it means forever
+		myBot.Bot.Restrict(m.Chat, cm)
+
 		cred.deleteMessages(myBot.Bot)
 		mutex.Lock()
 		delete(myBot.UserJoin, m.UserJoined.ID)
