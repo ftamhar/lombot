@@ -1,8 +1,8 @@
 # LOMBOT
-## Description
+## Deskripsi
 Project bot telegram sederhana dan suka-suka untuk mengisi waktu luang.
 
-### Options
+## Opsi-Opsi
 
     -t : Token API telegram (required)
     -u : Username pengelola bot (required)
@@ -10,10 +10,27 @@ Project bot telegram sederhana dan suka-suka untuk mengisi waktu luang.
     -i : Lama mengabaikan pesan (detik) (default 60)
     -v : Mode debug (boolean) (default false)
 
-## Usage
+## Cara Menjalankan Bot
 ```shell
 go run lombot.go <OPTIONS>
 ```
+## Fungsi Bot
+1. Meminta captcha kepada user yang baru join.
+   1. Jika salah 3 kali maka captcha baru akan di generate.
+   2. Jika user diundang oleh admin, maka tidak akan di minta mengisi captcha.
+2. /admin
+   - Untuk ping admin-admin grup.
+3. /ban (khusus admin grup)
+   - Untuk ban user, dengan cara me-reply pesan dari user yang akan di ban.
+4. /halo
+   - Untuk say hello.
+5. /id
+   - Untuk menampilkan id user yang meminta.
+6. /testpoll
+   - Untuk menampilkan testpolling
+7. Otomatis menghapus pesan user join/keluar
+
+Jangan lupa memberi izin untuk men-delete pesan dan mem-ban user
 
 ## Penutup
 Semoga Bermanfaat
