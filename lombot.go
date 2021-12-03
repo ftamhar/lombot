@@ -174,14 +174,12 @@ func main() {
 		}
 		b.Delete(m)
 		mutex.Lock()
+		defer mutex.Unlock()
 		status := myBot.hasReportAdmin
-		mutex.Unlock()
 		if status {
 			return
 		}
-		mutex.Lock()
 		myBot.hasReportAdmin = true
-		mutex.Unlock()
 		admins, err := b.AdminsOf(m.Chat)
 		if err != nil {
 			panic("failed to get admin")
@@ -196,7 +194,7 @@ func main() {
 			}
 		}
 		send, _ := b.Send(m.Chat, "Ping <b>"+res+"</b>", tb.ModeHTML)
-		t := 30 * time.Minute
+		t := 30 * time.Second
 		go myBot.deleteChat(send, t)
 		go func(t time.Duration) {
 			select {
@@ -284,8 +282,8 @@ func main() {
 		}
 
 		mutex.Lock()
+		defer mutex.Unlock()
 		credential, ok := myBot.UserJoin[m.UserJoined.ID]
-		mutex.Unlock()
 		if ok {
 			return
 		}
@@ -306,10 +304,7 @@ func main() {
 			wait:   time.Duration(*wait) * time.Minute,
 		}
 
-		mutex.Lock()
 		myBot.UserJoin[m.UserJoined.ID] = credential
-		mutex.Unlock()
-
 		imgCaptcha, key, path, err := getCaptcha()
 		if err != nil {
 			panic(err.Error())
@@ -322,9 +317,10 @@ func main() {
 		minfo := fmt.Sprintf(`
 Hai %v..!
 Tulis captcha di bawah dalam waktu %v menit.
-Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJoined.LastName), *wait)
+<b>Huruf besar dan kecil berpengaruh.
+Jika 3 kali salah, maka akan diberi captcha baru.</b>`, getFullName(m.UserJoined.FirstName, m.UserJoined.LastName), *wait)
 
-		info, err := b.Send(m.Chat, minfo)
+		info, err := b.Send(m.Chat, minfo, tb.ModeHTML)
 		if err != nil {
 			fmt.Println("failed to send msg :", err.Error())
 			// Immediately banned user, it's a spam
@@ -347,12 +343,13 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 		credential.Pesans = append(credential.Pesans, captchaMessage)
 
 		go myBot.acceptOrDelete(m, &cm)
+		return
 	})
 
 	b.Handle(tb.OnText, func(m *tb.Message) {
 		mutex.Lock()
+		defer mutex.Unlock()
 		cred, ok := myBot.UserJoin[m.Sender.ID]
-		mutex.Unlock()
 		if ok {
 			if m.Text == cred.Key {
 				b.Delete(m)
@@ -362,15 +359,11 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 			b.Delete(m)
 
 			if cred.retry < 2 {
-				mutex.Lock()
 				cred.retry++
-				mutex.Unlock()
 				return
 			}
 
-			mutex.Lock()
 			cred.retry = 0
-			mutex.Unlock()
 
 			imgCaptcha, key, path, err := getCaptcha()
 			if err != nil {
@@ -381,9 +374,8 @@ Huruf besar dan kecil berpengaruh`, getFullName(m.UserJoined.FirstName, m.UserJo
 			}()
 
 			b.Edit(cred.Pesans[1], &imgCaptcha)
-			mutex.Lock()
 			cred.Key = key
-			mutex.Unlock()
+			return
 		}
 	})
 
@@ -482,28 +474,27 @@ func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
 
 		cred.deleteMessages(myBot.Bot)
 		mutex.Lock()
-		delete(myBot.UserJoin, m.UserJoined.ID)
+		delete(myBot.UserJoin, cred.User.ID)
 		mutex.Unlock()
 		return
 
 	case <-cred.ch:
-
-		cm.RestrictedUntil = time.Now().Add(31 * time.Second).Unix() // if less than 30 seconds, it means forever
+		cm.RestrictedUntil = time.Now().Add(1 * time.Minute).Unix() // if less than 30 seconds, it means forever
 		myBot.Bot.Restrict(m.Chat, cm)
 
 		cred.deleteMessages(myBot.Bot)
-		mutex.Lock()
-		delete(myBot.UserJoin, m.UserJoined.ID)
-		mutex.Unlock()
-
-		msg := fmt.Sprintf(`Selamat datang <b><a href="tg://user?id=%v">%v</a></b>`, cred.User.ID, getFullName(cred.User.FirstName, cred.User.LastName))
+		msg := fmt.Sprintf(`
+Selamat datang <b><a href="tg://user?id=%v">%v</a></b>
+Anda dapat mengirim media setelah pesan ini hilang`, cred.User.ID, getFullName(cred.User.FirstName, cred.User.LastName))
 
 		mutex.Lock()
-		delete(myBot.retry, m.UserJoined.ID)
+		delete(myBot.UserJoin, cred.User.ID)
+		delete(myBot.retry, cred.User.ID)
 		mutex.Unlock()
+
 		saveFileJson(myBot.retry, retryPath)
-
-		myBot.Bot.Send(m.Chat, msg, tb.ModeHTML)
+		send, _ := myBot.Bot.Send(m.Chat, msg, tb.ModeHTML)
+		go myBot.deleteChat(send, time.Minute)
 		return
 	}
 }
