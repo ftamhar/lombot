@@ -22,10 +22,10 @@ import (
 var (
 	pwd       string
 	retryPath string
-	token     *string
-	superUser *string
-	wait      *int64
-	ignore    *int64
+	token     string
+	superUser string
+	wait      int64
+	ignore    int64
 	verbose   bool
 	mutex     sync.Mutex
 )
@@ -47,12 +47,16 @@ type MyBot struct {
 }
 
 func init() {
-	pwd, _ = os.Getwd()
+	var err error
+	pwd, err = os.Getwd()
+	if err != nil {
+		log.Panicf("failed to get current directory: %v", err.Error())
+	}
 	retryPath = pwd + "/retry.json"
-	token = flag.String("t", "", "token bot telegram (required)")
-	superUser = flag.String("u", "", "username pengelola bot (required)")
-	wait = flag.Int64("w", 5, "lama menunggu jawaban (menit)")
-	ignore = flag.Int64("i", 60, "lama mengabaikan chat (detik)")
+	flag.StringVar(&token, "t", "", "bot token")
+	flag.StringVar(&superUser, "su", "", "super user")
+	flag.Int64Var(&wait, "w", 5, "lama menunggu jawaban (menit)")
+	flag.Int64Var(&ignore, "i", 0, "lama mengabaikan chat (detik)")
 
 	flag.Func("v", "mode debug (boolean) (default false)", func(s string) error {
 		if s != "true" && s != "false" {
@@ -68,10 +72,10 @@ func init() {
 
 func main() {
 	flag.Parse()
-	if *token == "" {
+	if token == "" {
 		log.Fatal("Token harus diisi : -t <token>")
 	}
-	if *superUser == "" {
+	if superUser == "" {
 		log.Fatal("username pengelola bot harus diisi : -u <username>")
 	}
 
@@ -89,12 +93,12 @@ func main() {
 			return true
 		}
 		// ignore chat in (*ignore) time
-		if time.Since(u.Message.Time()) > time.Duration(*ignore)*time.Second {
+		if time.Since(u.Message.Time()) > time.Duration(ignore)*time.Second {
 			return false
 		}
 		return true
 	})
-	fileLogger, err := os.OpenFile("./logger.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	fileLogger, err := os.OpenFile("./logger.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
 	}
@@ -108,7 +112,7 @@ func main() {
 		// If field is empty it equals to "https://api.telegram.org".
 		// URL: "http://195.129.111.17:8012",
 
-		Token: *token,
+		Token: token,
 		// Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 		Poller: middleware,
 
@@ -119,7 +123,6 @@ func main() {
 		},
 		Verbose: verbose,
 	})
-
 	if err != nil {
 		log.Fatal("token salah: " + err.Error())
 		return
@@ -197,12 +200,10 @@ func main() {
 		t := 30 * time.Second
 		go myBot.deleteChat(send, t)
 		go func(t time.Duration) {
-			select {
-			case <-time.After(t):
-				mutex.Lock()
-				myBot.hasReportAdmin = false
-				mutex.Unlock()
-			}
+			<-time.After(t)
+			mutex.Lock()
+			myBot.hasReportAdmin = false
+			mutex.Unlock()
 		}(t)
 	})
 
@@ -283,7 +284,7 @@ func main() {
 
 		mutex.Lock()
 		defer mutex.Unlock()
-		credential, ok := myBot.UserJoin[m.UserJoined.ID]
+		_, ok := myBot.UserJoin[m.UserJoined.ID]
 		if ok {
 			return
 		}
@@ -297,11 +298,11 @@ func main() {
 		}
 		saveFileJson(myBot.retry, retryPath)
 
-		credential = &Credentials{
+		credential := &Credentials{
 			User:   m.UserJoined,
 			Pesans: make([]*tb.Message, 0),
 			ch:     make(chan struct{}),
-			wait:   time.Duration(*wait) * time.Minute,
+			wait:   time.Duration(wait) * time.Minute,
 		}
 
 		myBot.UserJoin[m.UserJoined.ID] = credential
@@ -318,7 +319,7 @@ func main() {
 Hai %v..!
 Tulis captcha di bawah dalam waktu %v menit.
 <b>Huruf besar dan kecil berpengaruh.
-Jika 3 kali salah, maka akan diberi captcha baru.</b>`, getFullName(m.UserJoined.FirstName, m.UserJoined.LastName), *wait)
+Jika 3 kali salah, maka akan diberi captcha baru.</b>`, getFullName(m.UserJoined.FirstName, m.UserJoined.LastName), wait)
 
 		info, err := b.Send(m.Chat, minfo, tb.ModeHTML)
 		if err != nil {
@@ -343,7 +344,6 @@ Jika 3 kali salah, maka akan diberi captcha baru.</b>`, getFullName(m.UserJoined
 		credential.Pesans = append(credential.Pesans, captchaMessage)
 
 		go myBot.acceptOrDelete(m, &cm)
-		return
 	})
 
 	b.Handle(tb.OnText, func(m *tb.Message) {
@@ -398,38 +398,35 @@ func getCaptcha() (tb.Photo, string, string, error) {
 		o.Noise = 3
 		o.CurveNumber = 13
 	})
+	if err != nil {
+		return tb.Photo{}, "", "", err
+	}
 	filename := uuid.New()
 	path := pwd + "/" + filename.String() + ".png"
 	file, err := os.Create(path)
 	if err != nil {
-		return tb.Photo{}, "", "", errors.New("failed to open c.png")
+		return tb.Photo{}, "", "", fmt.Errorf("failed to create file : %w", err)
 	}
-	defer func() {
-		file.Close()
-	}()
+	defer file.Close()
 
 	err = img.WriteImage(file)
 	if err != nil {
 		return tb.Photo{}, "", "", errors.New("failed to write img")
 	}
-	return tb.Photo{
-		File: tb.FromDisk(path),
-	}, img.Text, path, nil
+	return tb.Photo{File: tb.FromDisk(path)}, img.Text, path, nil
 }
 
-func getFullName(f, l string) string {
-	return strings.Trim(fmt.Sprintf("%v %v", f, l), " ")
+func getFullName(firstName, lastName string) string {
+	return strings.Trim(fmt.Sprintf("%v %v", firstName, lastName), " ")
 }
 
 func isSuperUser(username string) bool {
-	return username == *superUser
+	return username == superUser
 }
 
 func (myBot *MyBot) deleteChat(m *tb.Message, t time.Duration) {
-	select {
-	case <-time.After(t):
-		myBot.Bot.Delete(m)
-	}
+	<-time.After(t)
+	myBot.Bot.Delete(m)
 }
 
 func (myBot *MyBot) restrictUser(m *tb.Message) (tb.ChatMember, error) {
@@ -438,7 +435,7 @@ func (myBot *MyBot) restrictUser(m *tb.Message) (tb.ChatMember, error) {
 		fmt.Println("failed to get chat member:", err.Error())
 	}
 
-	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.retry[m.UserJoined.ID]*5) * time.Minute).Add(time.Duration(*wait) * time.Minute).Unix()
+	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.retry[m.UserJoined.ID]*5) * time.Minute).Add(time.Duration(wait) * time.Minute).Unix()
 	cm.CanSendMessages = true
 	err = myBot.Bot.Restrict(m.Chat, cm)
 	if err != nil {
@@ -524,7 +521,7 @@ func (myBot *MyBot) notText() func(m *tb.Message) {
 }
 
 func writeFile(path string, data []byte) error {
-	return ioutil.WriteFile(path, data, 0666)
+	return ioutil.WriteFile(path, data, 0o666)
 }
 
 func (cred *Credentials) deleteMessages(b *tb.Bot) {
