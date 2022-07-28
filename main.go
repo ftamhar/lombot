@@ -41,8 +41,8 @@ type Credentials struct {
 
 type MyBot struct {
 	Bot            *tb.Bot
-	UserJoin       map[int]*Credentials
-	retry          map[int]int
+	UserJoin       map[int64]*Credentials
+	retry          map[int64]int
 	hasReportAdmin bool
 }
 
@@ -139,8 +139,8 @@ func main() {
 
 	myBot := &MyBot{
 		Bot:      b,
-		retry:    make(map[int]int),
-		UserJoin: make(map[int]*Credentials),
+		retry:    make(map[int64]int),
+		UserJoin: make(map[int64]*Credentials),
 	}
 
 	fileRetry, err := os.ReadFile(retryPath)
