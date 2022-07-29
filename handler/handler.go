@@ -38,7 +38,9 @@ func Handle(mb *mybot.MyBot) {
 			return nil
 		}
 		go mb.DeleteChat(m.Message(), 60*time.Second)
-
+		if m.Sender().Username == "" {
+			return nil
+		}
 		_, err := mb.Db.Exec("insert into subscriptions values (?, ?)", m.Chat().ID, m.Sender().Username)
 		if err != nil {
 			return err
@@ -57,6 +59,10 @@ func Handle(mb *mybot.MyBot) {
 			return nil
 		}
 		go mb.DeleteChat(m.Message(), 60*time.Second)
+
+		if m.Sender().Username == "" {
+			return nil
+		}
 
 		_, err := mb.Db.Exec("delete from subscriptions where room_id = ? and user_name = ?", m.Chat().ID, m.Sender().Username)
 		if err != nil {
@@ -86,7 +92,12 @@ func Handle(mb *mybot.MyBot) {
 
 		var counter int
 		var username string
+		var max int
 		for rows.Next() {
+			if max == 100 {
+				break
+			}
+			max++
 			err := rows.Scan(&username)
 			if err != nil {
 				return err
