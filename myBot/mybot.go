@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -19,15 +18,17 @@ import (
 
 type MyBot struct {
 	*tb.Bot
-	Db             *sql.DB
-	UserJoin       map[int64]*Credentials
-	Retry          map[int64]int
-	HasReportAdmin bool
-	Mutex          sync.Mutex
-	Wait           int64
-	SuperUser      string
-	RetryPath      string
-	SubsTimeout    time.Duration
+	Db                       *sql.DB
+	UserJoin                 map[int64]*Credentials
+	Retry                    map[int64]int
+	HasReportAdmin           bool
+	Mutex                    sync.Mutex
+	Wait                     int64
+	SuperUser                string
+	RetryPath                string
+	SubsTimeout              time.Duration
+	MaxSubscribers           int64
+	BatchMessagesSubscribers int64
 }
 
 type Credentials struct {
@@ -139,15 +140,16 @@ func (mb *MyBot) IsSuperUser(username string) bool {
 	return username == mb.SuperUser
 }
 
-func SaveFileJson(data interface{}, path string) {
+func SaveFileJson(data any, path string) error {
 	b1, err := json.Marshal(data)
 	if err != nil {
-		log.Panicf("failed to marshal : %v", err.Error())
+		return err
 	}
 
 	if err := writeFile(path, b1); err != nil {
-		log.Panicf("failed to write file : %v", err.Error())
+		return err
 	}
+	return nil
 }
 
 func writeFile(path string, data []byte) error {

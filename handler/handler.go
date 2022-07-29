@@ -50,7 +50,7 @@ func Handle(mb *mybot.MyBot) {
 		mb.HasReportAdmin = true
 		admins, err := mb.AdminsOf(m.Chat())
 		if err != nil {
-			panic("failed to get admin")
+			return err
 		}
 		res := ""
 		for _, admin := range admins {
@@ -101,11 +101,24 @@ func subscriptions(mb *mybot.MyBot) {
 		if !m.Message().FromGroup() {
 			return nil
 		}
-		go mb.DeleteChat(m.Message(), 60*time.Second)
+		mb.Delete(m.Message())
 		if m.Sender().Username == "" {
 			return nil
 		}
-		_, err := mb.Db.Exec("insert into subscriptions values (?, ?)", m.Chat().ID, m.Sender().Username)
+
+		var count int
+		err := mb.Db.QueryRow("SELECT COUNT(*) as count FROM subscriptions WHERE room_id = ?", m.Chat().ID).
+			Scan(&count)
+		if err != nil {
+			return err
+		}
+
+		if count == int(mb.MaxSubscribers) {
+			_, err = mb.Send(m.Chat(), "Maaf, batas pendaftaran subscriber telah tercapai")
+			return err
+		}
+
+		_, err = mb.Db.Exec("insert into subscriptions values (?, ?)", m.Chat().ID, m.Sender().Username)
 		if err != nil {
 			return err
 		}
@@ -122,7 +135,7 @@ func subscriptions(mb *mybot.MyBot) {
 		if !m.Message().FromGroup() {
 			return nil
 		}
-		go mb.DeleteChat(m.Message(), 60*time.Second)
+		mb.Delete(m.Message())
 
 		if m.Sender().Username == "" {
 			return nil
@@ -154,11 +167,11 @@ func subscriptions(mb *mybot.MyBot) {
 		}
 		defer rows.Close()
 
-		var counter int
+		var batchMessages int64
 		var username string
-		var max int
+		var max int64
 		for rows.Next() {
-			if max == 100 {
+			if max == mb.MaxSubscribers {
 				break
 			}
 			max++
@@ -167,7 +180,7 @@ func subscriptions(mb *mybot.MyBot) {
 				return err
 			}
 			msg += fmt.Sprintf("@%s ", username)
-			if counter == 30 {
+			if batchMessages == mb.BatchMessagesSubscribers {
 				send, err := mb.Send(m.Chat(), msg)
 				if err != nil {
 					return err
@@ -235,7 +248,7 @@ func manageUser(mb *mybot.MyBot) {
 		mb.UserJoin[m.Message().UserJoined.ID] = credential
 		imgCaptcha, key, path, err := mybot.GetCaptcha()
 		if err != nil {
-			panic(err.Error())
+			return err
 		}
 
 		defer func() {
@@ -295,7 +308,7 @@ Jika 3 kali salah, maka akan diberi captcha baru.</b>`, mybot.GetFullName(m.Mess
 
 			imgCaptcha, key, path, err := mybot.GetCaptcha()
 			if err != nil {
-				panic(err.Error())
+				return err
 			}
 			defer func() {
 				os.Remove(path)
@@ -329,12 +342,12 @@ Jika 3 kali salah, maka akan diberi captcha baru.</b>`, mybot.GetFullName(m.Mess
 		}
 		cm, err := mb.ChatMemberOf(m.Chat(), m.Message().ReplyTo.Sender)
 		if err != nil {
-			panic("failed to get chat member: " + err.Error())
+			return err
 		}
 		cm.RestrictedUntil = tb.Forever()
 		err = mb.Ban(m.Chat(), cm)
 		if err != nil {
-			panic(err.Error())
+			return err
 		}
 		mb.Delete(m.Message().ReplyTo)
 		return nil

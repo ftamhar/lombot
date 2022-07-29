@@ -4,12 +4,14 @@ Project bot telegram sederhana dan suka-suka untuk mengisi waktu luang.
 
 ## Opsi-Opsi
 
-    -t : Token API telegram (required)
-    -u : Username pengelola bot (required)
-    -w : Lama menunggu jawaban (menit) (default 5)
-    -i : Lama mengabaikan pesan (detik) (default 60)
-    -v : Mode debug (boolean) (default false)
-    -st: Timeout pesan subscription terhapus (menit) (dafault 0 -> tidak terhapus)
+    -t   : Token API telegram (required)
+    -u   : Username pengelola bot (required)
+    -w   : Lama menunggu jawaban (menit) (default 5)
+    -i   : Lama mengabaikan pesan (detik) (default 60)
+    -v   : Mode debug (boolean) (default false)
+    -st  : Timeout pesan subscription terhapus (menit) (dafault 0 -> tidak terhapus)
+    -ms  : Maksimal Subscribers dalam 1 group (default 100)
+    -bms : Batch messages subscribers yang akan di kirim (default 30)
 
 ## Cara Menjalankan Bot
 ```shell

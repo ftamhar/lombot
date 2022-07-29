@@ -22,14 +22,16 @@ import (
 )
 
 var (
-	pwd        string
-	retryPath  string
-	token      string
-	superUser  string
-	subTimeout int
-	wait       int64
-	ignore     int64
-	verbose    bool
+	pwd                      string
+	retryPath                string
+	token                    string
+	superUser                string
+	subTimeout               int
+	wait                     int64
+	ignore                   int64
+	verbose                  bool
+	maxSubscribers           int64
+	batchMessagesSubscribers int64
 )
 
 func init() {
@@ -44,6 +46,8 @@ func init() {
 	flag.Int64Var(&wait, "w", 5, "lama menunggu jawaban (menit)")
 	flag.Int64Var(&ignore, "i", 10, "lama mengabaikan chat (detik)")
 	flag.IntVar(&subTimeout, "st", 0, "timeout subscription (menit)")
+	flag.Int64Var(&maxSubscribers, "ms", 100, "max subscriber")
+	flag.Int64Var(&batchMessagesSubscribers, "bms", 30, "batch subscribe")
 
 	flag.Func("v", "mode debug (boolean) (default false)", func(s string) error {
 		if s != "true" && s != "false" {
@@ -91,7 +95,6 @@ func main() {
 	}
 	defer fileLogger.Close()
 
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	myLogger := zerolog.New(fileLogger).With().Timestamp().Caller().Logger()
 
 	b, err := tb.NewBot(tb.Settings{
@@ -111,8 +114,13 @@ func main() {
 		log.Fatal("token salah: " + err.Error())
 		return
 	}
-
 	defer b.Stop()
+
+	b.OnError = func(err error, c tb.Context) {
+		if err != tb.ErrTrueResult {
+			myLogger.Error().Err(err).Msg(c.Message().Text)
+		}
+	}
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -127,15 +135,17 @@ func main() {
 	}
 
 	myBot := &mybot.MyBot{
-		Bot:         b,
-		Db:          db,
-		UserJoin:    make(map[int64]*mybot.Credentials),
-		Retry:       make(map[int64]int),
-		Mutex:       sync.Mutex{},
-		Wait:        wait,
-		SuperUser:   superUser,
-		RetryPath:   retryPath,
-		SubsTimeout: time.Duration(subTimeout),
+		Bot:                      b,
+		Db:                       db,
+		UserJoin:                 make(map[int64]*mybot.Credentials),
+		Retry:                    make(map[int64]int),
+		Mutex:                    sync.Mutex{},
+		Wait:                     wait,
+		SuperUser:                superUser,
+		RetryPath:                retryPath,
+		SubsTimeout:              time.Duration(subTimeout),
+		MaxSubscribers:           maxSubscribers,
+		BatchMessagesSubscribers: batchMessagesSubscribers,
 	}
 
 	fileRetry, err := os.ReadFile(retryPath)
