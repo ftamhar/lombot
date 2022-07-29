@@ -37,14 +37,17 @@ func Handle(mb *mybot.MyBot) {
 		if !m.Message().FromGroup() {
 			return nil
 		}
+		go mb.DeleteChat(m.Message(), 60*time.Second)
 
-		mb.Db.Exec("insert into subscriptions values (?, ?)", m.Chat().ID, m.Sender().Username)
+		_, err := mb.Db.Exec("insert into subscriptions values (?, ?)", m.Chat().ID, m.Sender().Username)
+		if err != nil {
+			return err
+		}
 
 		send, err := mb.Send(m.Chat(), "Anda sudah subscribe group ini!")
 		if err != nil {
 			return err
 		}
-		go mb.DeleteChat(m.Message(), 60*time.Second)
 		go mb.DeleteChat(send, 60*time.Second)
 		return nil
 	})
@@ -53,14 +56,17 @@ func Handle(mb *mybot.MyBot) {
 		if !m.Message().FromGroup() {
 			return nil
 		}
+		go mb.DeleteChat(m.Message(), 60*time.Second)
 
-		mb.Db.Exec("delete from subscriptions where room_id = ? and user_name = ?", m.Chat().ID, m.Sender().Username)
+		_, err := mb.Db.Exec("delete from subscriptions where room_id = ? and user_name = ?", m.Chat().ID, m.Sender().Username)
+		if err != nil {
+			return err
+		}
 
 		send, err := mb.Send(m.Chat(), "Anda sudah tidak subscribe group ini!")
 		if err != nil {
 			return err
 		}
-		go mb.DeleteChat(m.Message(), 60*time.Second)
 		go mb.DeleteChat(send, 60*time.Second)
 		return nil
 	})
