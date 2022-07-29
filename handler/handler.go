@@ -331,7 +331,7 @@ Jika 3 kali salah, maka akan diberi captcha baru.</b>`, mybot.GetFullName(m.Mess
 
 	mb.Handle("/ban", func(m tb.Context) error {
 		mb.Delete(m.Message())
-		if !m.Chat().PinnedMessage.FromGroup() {
+		if !m.Message().FromGroup() {
 			return nil
 		}
 		if !mb.IsSenderAdmin(m.Message()) {
