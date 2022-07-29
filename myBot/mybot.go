@@ -27,6 +27,7 @@ type MyBot struct {
 	Wait           int64
 	SuperUser      string
 	RetryPath      string
+	SubsTimeout    time.Duration
 }
 
 type Credentials struct {

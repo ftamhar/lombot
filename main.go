@@ -22,13 +22,14 @@ import (
 )
 
 var (
-	pwd       string
-	retryPath string
-	token     string
-	superUser string
-	wait      int64
-	ignore    int64
-	verbose   bool
+	pwd        string
+	retryPath  string
+	token      string
+	superUser  string
+	subTimeout int
+	wait       int64
+	ignore     int64
+	verbose    bool
 )
 
 func init() {
@@ -42,6 +43,7 @@ func init() {
 	flag.StringVar(&superUser, "u", "", "super user")
 	flag.Int64Var(&wait, "w", 5, "lama menunggu jawaban (menit)")
 	flag.Int64Var(&ignore, "i", 10, "lama mengabaikan chat (detik)")
+	flag.IntVar(&subTimeout, "st", 0, "timeout subscription (menit)")
 
 	flag.Func("v", "mode debug (boolean) (default false)", func(s string) error {
 		if s != "true" && s != "false" {
@@ -125,14 +127,15 @@ func main() {
 	}
 
 	myBot := &mybot.MyBot{
-		Bot:       b,
-		Db:        db,
-		UserJoin:  make(map[int64]*mybot.Credentials),
-		Retry:     make(map[int64]int),
-		Mutex:     sync.Mutex{},
-		Wait:      wait,
-		SuperUser: superUser,
-		RetryPath: retryPath,
+		Bot:         b,
+		Db:          db,
+		UserJoin:    make(map[int64]*mybot.Credentials),
+		Retry:       make(map[int64]int),
+		Mutex:       sync.Mutex{},
+		Wait:        wait,
+		SuperUser:   superUser,
+		RetryPath:   retryPath,
+		SubsTimeout: time.Duration(subTimeout),
 	}
 
 	fileRetry, err := os.ReadFile(retryPath)

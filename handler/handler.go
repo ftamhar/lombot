@@ -11,6 +11,9 @@ import (
 )
 
 func Handle(mb *mybot.MyBot) {
+	subscriptions(mb)
+	manageUser(mb)
+
 	mb.Handle("/Bismillah", func(m tb.Context) error {
 		if m.Message().FromGroup() {
 			send, err := mb.Send(m.Chat(), "MasyaaAllah Tabarakallah")
@@ -33,6 +36,67 @@ func Handle(mb *mybot.MyBot) {
 		return nil
 	})
 
+	mb.Handle("/admin", func(m tb.Context) error {
+		if !m.Message().FromGroup() {
+			return nil
+		}
+		mb.Delete(m.Message())
+		mb.Mutex.Lock()
+		defer mb.Mutex.Unlock()
+		status := mb.HasReportAdmin
+		if status {
+			return nil
+		}
+		mb.HasReportAdmin = true
+		admins, err := mb.AdminsOf(m.Chat())
+		if err != nil {
+			panic("failed to get admin")
+		}
+		res := ""
+		for _, admin := range admins {
+			if admin.User.Username == m.Sender().Username {
+				return nil
+			}
+			if !admin.User.IsBot && admin.User.Username != "" {
+				res += "@" + admin.User.Username + " "
+			}
+		}
+		send, _ := mb.Send(m.Chat(), "Ping <b>"+res+"</b>", tb.ModeHTML)
+		t := 30 * time.Second
+		go mb.DeleteChat(send, t)
+		go func(t time.Duration) {
+			<-time.After(t)
+			mb.Mutex.Lock()
+			mb.HasReportAdmin = false
+			mb.Mutex.Unlock()
+		}(t)
+		return nil
+	})
+
+	mb.Handle("/halo", func(m tb.Context) error {
+		if !m.Message().FromGroup() {
+			return nil
+		}
+		mb.Send(m.Chat(), fmt.Sprintf("Halo <b>%v!</b> Berembe kabarm?", mybot.GetFullName(m.Sender().FirstName, m.Sender().LastName)), tb.ModeHTML)
+		return nil
+	})
+
+	mb.Handle("/id", func(m tb.Context) error {
+		// all the text messages that weren't
+		// captured by existing handlers
+		if !m.Message().FromGroup() {
+			return nil
+		}
+		msg := fmt.Sprintf("%v, ID Anda adalah %d", mybot.GetFullName(m.Sender().FirstName, m.Sender().LastName), m.Sender().ID)
+		mb.Send(m.Chat(), msg)
+		return nil
+	})
+
+	mb.Handle(tb.OnContact, mb.NotText())
+	mb.Handle(tb.OnLocation, mb.NotText())
+}
+
+func subscriptions(mb *mybot.MyBot) {
 	mb.Handle("/subs", func(m tb.Context) error {
 		if !m.Message().FromGroup() {
 			return nil
@@ -108,7 +172,9 @@ func Handle(mb *mybot.MyBot) {
 				if err != nil {
 					return err
 				}
-				go mb.DeleteChat(send, 60*time.Second)
+				if mb.SubsTimeout > 0 {
+					go mb.DeleteChat(send, mb.SubsTimeout*time.Minute)
+				}
 				msg = ""
 			}
 		}
@@ -118,91 +184,16 @@ func Handle(mb *mybot.MyBot) {
 			if err != nil {
 				return err
 			}
-			go mb.DeleteChat(send, 5*time.Minute)
-		}
-		return nil
-	})
-
-	mb.Handle("/admin", func(m tb.Context) error {
-		if !m.Message().FromGroup() {
-			return nil
-		}
-		mb.Delete(m.Message())
-		mb.Mutex.Lock()
-		defer mb.Mutex.Unlock()
-		status := mb.HasReportAdmin
-		if status {
-			return nil
-		}
-		mb.HasReportAdmin = true
-		admins, err := mb.AdminsOf(m.Chat())
-		if err != nil {
-			panic("failed to get admin")
-		}
-		res := ""
-		for _, admin := range admins {
-			if admin.User.Username == m.Sender().Username {
-				return nil
+			if mb.SubsTimeout > 0 {
+				go mb.DeleteChat(send, mb.SubsTimeout*time.Minute)
 			}
-			if !admin.User.IsBot && admin.User.Username != "" {
-				res += "@" + admin.User.Username + " "
-			}
+
 		}
-		send, _ := mb.Send(m.Chat(), "Ping <b>"+res+"</b>", tb.ModeHTML)
-		t := 30 * time.Second
-		go mb.DeleteChat(send, t)
-		go func(t time.Duration) {
-			<-time.After(t)
-			mb.Mutex.Lock()
-			mb.HasReportAdmin = false
-			mb.Mutex.Unlock()
-		}(t)
 		return nil
 	})
+}
 
-	mb.Handle("/ban", func(m tb.Context) error {
-		mb.Delete(m.Message())
-		if !m.Chat().PinnedMessage.FromGroup() {
-			return nil
-		}
-		if !mb.IsSenderAdmin(m.Message()) {
-			return nil
-		}
-		if m.Message().ReplyTo.Sender == nil {
-			return nil
-		}
-		cm, err := mb.ChatMemberOf(m.Chat(), m.Message().ReplyTo.Sender)
-		if err != nil {
-			panic("failed to get chat member: " + err.Error())
-		}
-		cm.RestrictedUntil = tb.Forever()
-		err = mb.Ban(m.Chat(), cm)
-		if err != nil {
-			panic(err.Error())
-		}
-		mb.Delete(m.Message().ReplyTo)
-		return nil
-	})
-
-	mb.Handle("/halo", func(m tb.Context) error {
-		if !m.Message().FromGroup() {
-			return nil
-		}
-		mb.Send(m.Chat(), fmt.Sprintf("Halo <b>%v!</b> Berembe kabarm?", mybot.GetFullName(m.Sender().FirstName, m.Sender().LastName)), tb.ModeHTML)
-		return nil
-	})
-
-	mb.Handle("/id", func(m tb.Context) error {
-		// all the text messages that weren't
-		// captured by existing handlers
-		if !m.Message().FromGroup() {
-			return nil
-		}
-		msg := fmt.Sprintf("%v, ID Anda adalah %d", mybot.GetFullName(m.Sender().FirstName, m.Sender().LastName), m.Sender().ID)
-		mb.Send(m.Chat(), msg)
-		return nil
-	})
-
+func manageUser(mb *mybot.MyBot) {
 	mb.Handle(tb.OnUserJoined, func(m tb.Context) error {
 		if !m.Message().FromGroup() {
 			return nil
@@ -325,7 +316,27 @@ Jika 3 kali salah, maka akan diberi captcha baru.</b>`, mybot.GetFullName(m.Mess
 		return nil
 	})
 
-	mb.Handle(tb.OnContact, mb.NotText())
-	mb.Handle(tb.OnLocation, mb.NotText())
-	fmt.Println("Bot is running...")
+	mb.Handle("/ban", func(m tb.Context) error {
+		mb.Delete(m.Message())
+		if !m.Chat().PinnedMessage.FromGroup() {
+			return nil
+		}
+		if !mb.IsSenderAdmin(m.Message()) {
+			return nil
+		}
+		if m.Message().ReplyTo.Sender == nil {
+			return nil
+		}
+		cm, err := mb.ChatMemberOf(m.Chat(), m.Message().ReplyTo.Sender)
+		if err != nil {
+			panic("failed to get chat member: " + err.Error())
+		}
+		cm.RestrictedUntil = tb.Forever()
+		err = mb.Ban(m.Chat(), cm)
+		if err != nil {
+			panic(err.Error())
+		}
+		mb.Delete(m.Message().ReplyTo)
+		return nil
+	})
 }
