@@ -9,10 +9,11 @@ Project bot telegram sederhana dan suka-suka untuk mengisi waktu luang.
     -w : Lama menunggu jawaban (menit) (default 5)
     -i : Lama mengabaikan pesan (detik) (default 60)
     -v : Mode debug (boolean) (default false)
+    -st: Timeout pesan subscription terhapus (menit) (dafault 0 -> tidak terhapus)
 
 ## Cara Menjalankan Bot
 ```shell
-go run lombot.go <OPTIONS>
+go run main.go <OPTIONS>
 ```
 ## Fungsi Bot
 1. Meminta captcha kepada user yang baru join.
