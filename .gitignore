@@ -1,3 +1,5 @@
+foo.sqlite
+tmp/*
 members.json
 retry.json
 *.png

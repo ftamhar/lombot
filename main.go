@@ -8,15 +8,17 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/rs/zerolog"
-	"github.com/steambap/captcha"
+	"lombot/database"
+	mybot "lombot/myBot"
 
-	tb "gopkg.in/tucnak/telebot.v2"
+	"lombot/handler"
+
+	"github.com/rs/zerolog"
+
+	tb "gopkg.in/telebot.v3"
 )
 
 var (
@@ -27,24 +29,7 @@ var (
 	wait      int64
 	ignore    int64
 	verbose   bool
-	mutex     sync.Mutex
 )
-
-type Credentials struct {
-	User   *tb.User
-	Key    string
-	Pesans []*tb.Message
-	ch     chan struct{}
-	wait   time.Duration
-	retry  uint8
-}
-
-type MyBot struct {
-	Bot            *tb.Bot
-	UserJoin       map[int64]*Credentials
-	retry          map[int64]int
-	hasReportAdmin bool
-}
 
 func init() {
 	var err error
@@ -54,9 +39,9 @@ func init() {
 	}
 	retryPath = pwd + "/retry.json"
 	flag.StringVar(&token, "t", "", "bot token")
-	flag.StringVar(&superUser, "su", "", "super user")
+	flag.StringVar(&superUser, "u", "", "super user")
 	flag.Int64Var(&wait, "w", 5, "lama menunggu jawaban (menit)")
-	flag.Int64Var(&ignore, "i", 0, "lama mengabaikan chat (detik)")
+	flag.Int64Var(&ignore, "i", 10, "lama mengabaikan chat (detik)")
 
 	flag.Func("v", "mode debug (boolean) (default false)", func(s string) error {
 		if s != "true" && s != "false" {
@@ -118,10 +103,7 @@ func main() {
 
 		// sync true to ensure all messages deleted properly
 		Synchronous: true,
-		Reporter: func(err error) {
-			myLogger.Error().Msg(err.Error())
-		},
-		Verbose: verbose,
+		Verbose:     verbose,
 	})
 	if err != nil {
 		log.Fatal("token salah: " + err.Error())
@@ -137,10 +119,20 @@ func main() {
 		}
 	}()
 
-	myBot := &MyBot{
-		Bot:      b,
-		retry:    make(map[int64]int),
-		UserJoin: make(map[int64]*Credentials),
+	db, err := database.OpenDbConnection()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	myBot := &mybot.MyBot{
+		Bot:       b,
+		Db:        db,
+		UserJoin:  make(map[int64]*mybot.Credentials),
+		Retry:     make(map[int64]int),
+		Mutex:     sync.Mutex{},
+		Wait:      wait,
+		SuperUser: superUser,
+		RetryPath: retryPath,
 	}
 
 	fileRetry, err := os.ReadFile(retryPath)
@@ -150,382 +142,17 @@ func main() {
 	}
 
 	if len(fileRetry) > 0 {
-		err := json.Unmarshal(fileRetry, &myBot.retry)
+		err := json.Unmarshal(fileRetry, &myBot.Retry)
 		if err != nil {
 			log.Fatal("failed to unmarshal retry:", err.Error())
 		}
 	}
 
-	b.Handle("/Bismillah", func(m *tb.Message) {
-		if m.FromGroup() {
-			send, _ := b.Send(m.Chat, "MasyaaAllah Tabarakallah")
-			go myBot.deleteChat(m, 60*time.Second)
-			go myBot.deleteChat(send, 60*time.Second)
-			return
-		}
-		if !isSuperUser(m.Sender.Username) {
-			return
-		}
-		send, _ := b.Send(m.Sender, "MasyaaAllah Tabarakallah")
-		go myBot.deleteChat(m, 60*time.Second)
-		go myBot.deleteChat(send, 60*time.Second)
-	})
-
-	b.Handle("/admin", func(m *tb.Message) {
-		if !m.FromGroup() {
-			return
-		}
-		b.Delete(m)
-		mutex.Lock()
-		defer mutex.Unlock()
-		status := myBot.hasReportAdmin
-		if status {
-			return
-		}
-		myBot.hasReportAdmin = true
-		admins, err := b.AdminsOf(m.Chat)
-		if err != nil {
-			panic("failed to get admin")
-		}
-		res := ""
-		for _, admin := range admins {
-			if admin.User.Username == m.Sender.Username {
-				return
-			}
-			if !admin.User.IsBot && admin.User.Username != "" {
-				res += "@" + admin.User.Username + " "
-			}
-		}
-		send, _ := b.Send(m.Chat, "Ping <b>"+res+"</b>", tb.ModeHTML)
-		t := 30 * time.Second
-		go myBot.deleteChat(send, t)
-		go func(t time.Duration) {
-			<-time.After(t)
-			mutex.Lock()
-			myBot.hasReportAdmin = false
-			mutex.Unlock()
-		}(t)
-	})
-
-	b.Handle("/ban", func(m *tb.Message) {
-		b.Delete(m)
-		if !m.FromGroup() {
-			return
-		}
-		if !myBot.isSenderAdmin(m) {
-			return
-		}
-		if m.ReplyTo.Sender == nil {
-			return
-		}
-		cm, err := b.ChatMemberOf(m.Chat, m.ReplyTo.Sender)
-		if err != nil {
-			panic("failed to get chat member: " + err.Error())
-		}
-		cm.RestrictedUntil = tb.Forever()
-		err = b.Ban(m.Chat, cm)
-		if err != nil {
-			panic(err.Error())
-		}
-		b.Delete(m.ReplyTo)
-	})
-
-	b.Handle("/halo", func(m *tb.Message) {
-		if !m.FromGroup() {
-			return
-		}
-		b.Send(m.Chat, fmt.Sprintf("Halo <b>%v!</b> Berembe kabarm?", getFullName(m.Sender.FirstName, m.Sender.LastName)), tb.ModeHTML)
-	})
-
-	b.Handle("/id", func(m *tb.Message) {
-		// all the text messages that weren't
-		// captured by existing handlers
-		if !m.FromGroup() {
-			return
-		}
-		msg := fmt.Sprintf("%v, ID Anda adalah %d", getFullName(m.Sender.FirstName, m.Sender.LastName), m.Sender.ID)
-		b.Send(m.Chat, msg)
-	})
-
-	b.Handle("/testpoll", func(m *tb.Message) {
-		if !m.FromGroup() {
-			return
-		}
-		poll := &tb.Poll{
-			Type:          tb.PollQuiz,
-			Question:      "Test Poll",
-			CloseUnixdate: time.Now().Unix() + 60,
-			Explanation:   "Explanation",
-			Options: []tb.PollOption{
-				{Text: "1"},
-				{Text: "2"},
-				{Text: "3"},
-			},
-			CorrectOption: 2,
-		}
-
-		b.Send(m.Chat, poll)
-	})
-
-	b.Handle(tb.OnUserJoined, func(m *tb.Message) {
-		if !m.FromGroup() {
-			return
-		}
-
-		b.Delete(m)
-
-		if myBot.isSenderAdmin(m) {
-			if !m.UserJoined.IsBot {
-				msg := fmt.Sprintf("Selamat datang %v", getFullName(m.UserJoined.FirstName, m.UserJoined.LastName))
-				b.Send(m.Chat, msg)
-			}
-			return
-		}
-
-		mutex.Lock()
-		defer mutex.Unlock()
-		_, ok := myBot.UserJoin[m.UserJoined.ID]
-		if ok {
-			return
-		}
-
-		myBot.retry[m.UserJoined.ID]++
-		cm, err := myBot.restrictUser(m)
-		if err != nil {
-			send, _ := b.Send(m.Chat, "Hai Admin, tolong jadikan saya admin agar dapat mengirim captcha 🙏")
-			go myBot.deleteChat(send, 30*time.Minute)
-			return
-		}
-		saveFileJson(myBot.retry, retryPath)
-
-		credential := &Credentials{
-			User:   m.UserJoined,
-			Pesans: make([]*tb.Message, 0),
-			ch:     make(chan struct{}),
-			wait:   time.Duration(wait) * time.Minute,
-		}
-
-		myBot.UserJoin[m.UserJoined.ID] = credential
-		imgCaptcha, key, path, err := getCaptcha()
-		if err != nil {
-			panic(err.Error())
-		}
-
-		defer func() {
-			os.Remove(path)
-		}()
-
-		minfo := fmt.Sprintf(`
-Hai %v..!
-Tulis captcha di bawah dalam waktu %v menit.
-<b>Huruf besar dan kecil berpengaruh.
-Jika 3 kali salah, maka akan diberi captcha baru.</b>`, getFullName(m.UserJoined.FirstName, m.UserJoined.LastName), wait)
-
-		info, err := b.Send(m.Chat, minfo, tb.ModeHTML)
-		if err != nil {
-			fmt.Println("failed to send msg :", err.Error())
-			// Immediately banned user, it's a spam
-			b.Ban(m.Chat, &tb.ChatMember{User: m.UserJoined, RestrictedUntil: tb.Forever()}, true)
-			credential.deleteMessages(b)
-			return
-		}
-
-		captchaMessage, err := b.Send(m.Chat, &imgCaptcha)
-		if err != nil {
-			fmt.Println("failed to send msg :", err.Error())
-			// Immediately banned user, it's a spam
-			b.Ban(m.Chat, &tb.ChatMember{User: m.UserJoined, RestrictedUntil: tb.Forever()}, true)
-			credential.deleteMessages(b)
-			return
-		}
-
-		credential.Key = key
-		credential.Pesans = append(credential.Pesans, info)
-		credential.Pesans = append(credential.Pesans, captchaMessage)
-
-		go myBot.acceptOrDelete(m, &cm)
-	})
-
-	b.Handle(tb.OnText, func(m *tb.Message) {
-		mutex.Lock()
-		defer mutex.Unlock()
-		cred, ok := myBot.UserJoin[m.Sender.ID]
-		if ok {
-			if m.Text == cred.Key {
-				b.Delete(m)
-				cred.ch <- struct{}{}
-				return
-			}
-			b.Delete(m)
-
-			if cred.retry < 2 {
-				cred.retry++
-				return
-			}
-
-			cred.retry = 0
-
-			imgCaptcha, key, path, err := getCaptcha()
-			if err != nil {
-				panic(err.Error())
-			}
-			defer func() {
-				os.Remove(path)
-			}()
-
-			b.Edit(cred.Pesans[1], &imgCaptcha)
-			cred.Key = key
-			return
-		}
-	})
-
-	b.Handle(tb.OnUserLeft, func(m *tb.Message) {
-		if !m.FromGroup() {
-			return
-		}
-		b.Delete(m)
-	})
-
-	b.Handle(tb.OnContact, myBot.notText())
-	b.Handle(tb.OnLocation, myBot.notText())
-
+	handler.Handle(myBot)
 	fmt.Println("bot started")
 	b.Start()
 }
 
-func getCaptcha() (tb.Photo, string, string, error) {
-	img, err := captcha.New(300, 100, func(o *captcha.Options) {
-		o.Noise = 3
-		o.CurveNumber = 13
-	})
-	if err != nil {
-		return tb.Photo{}, "", "", err
-	}
-	filename := uuid.New()
-	path := pwd + "/" + filename.String() + ".png"
-	file, err := os.Create(path)
-	if err != nil {
-		return tb.Photo{}, "", "", fmt.Errorf("failed to create file : %w", err)
-	}
-	defer file.Close()
-
-	err = img.WriteImage(file)
-	if err != nil {
-		return tb.Photo{}, "", "", errors.New("failed to write img")
-	}
-	return tb.Photo{File: tb.FromDisk(path)}, img.Text, path, nil
-}
-
-func getFullName(firstName, lastName string) string {
-	return strings.Trim(fmt.Sprintf("%v %v", firstName, lastName), " ")
-}
-
-func isSuperUser(username string) bool {
-	return username == superUser
-}
-
-func (myBot *MyBot) deleteChat(m *tb.Message, t time.Duration) {
-	<-time.After(t)
-	myBot.Bot.Delete(m)
-}
-
-func (myBot *MyBot) restrictUser(m *tb.Message) (tb.ChatMember, error) {
-	cm, err := myBot.Bot.ChatMemberOf(m.Chat, m.UserJoined)
-	if err != nil {
-		fmt.Println("failed to get chat member:", err.Error())
-	}
-
-	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.retry[m.UserJoined.ID]*5) * time.Minute).Add(time.Duration(wait) * time.Minute).Unix()
-	cm.CanSendMessages = true
-	err = myBot.Bot.Restrict(m.Chat, cm)
-	if err != nil {
-		return *cm, err
-	}
-	return *cm, nil
-}
-
-func (myBot *MyBot) isSenderAdmin(m *tb.Message) bool {
-	admins, err := myBot.Bot.AdminsOf(m.Chat)
-	if err != nil {
-		return false
-	}
-
-	for _, v := range admins {
-		if v.User.ID == m.Sender.ID {
-			return true
-		}
-	}
-	return false
-}
-
-func (myBot *MyBot) acceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
-	mutex.Lock()
-	cred := myBot.UserJoin[m.UserJoined.ID]
-	mutex.Unlock()
-	select {
-	case <-time.After(cred.wait):
-		err := myBot.Bot.Ban(m.Chat, cm, true)
-		if err != nil {
-			fmt.Println("failed to ban user:", err.Error())
-		}
-
-		cred.deleteMessages(myBot.Bot)
-		mutex.Lock()
-		delete(myBot.UserJoin, cred.User.ID)
-		mutex.Unlock()
-		return
-
-	case <-cred.ch:
-		cm.RestrictedUntil = time.Now().Add(1 * time.Minute).Unix() // if less than 30 seconds, it means forever
-		myBot.Bot.Restrict(m.Chat, cm)
-
-		cred.deleteMessages(myBot.Bot)
-		msg := fmt.Sprintf(`
-Selamat datang <b><a href="tg://user?id=%v">%v</a></b>
-Anda dapat mengirim media setelah pesan ini hilang`, cred.User.ID, getFullName(cred.User.FirstName, cred.User.LastName))
-
-		mutex.Lock()
-		delete(myBot.UserJoin, cred.User.ID)
-		delete(myBot.retry, cred.User.ID)
-		mutex.Unlock()
-
-		saveFileJson(myBot.retry, retryPath)
-		send, _ := myBot.Bot.Send(m.Chat, msg, tb.ModeHTML)
-		go myBot.deleteChat(send, time.Minute)
-		return
-	}
-}
-
-func saveFileJson(data interface{}, path string) {
-	b1, err := json.Marshal(data)
-	if err != nil {
-		log.Panicf("failed to marshal : %v", err.Error())
-	}
-
-	if err := writeFile(path, b1); err != nil {
-		log.Panicf("failed to write file : %v", err.Error())
-	}
-}
-
-func (myBot *MyBot) notText() func(m *tb.Message) {
-	return func(m *tb.Message) {
-		if !m.FromGroup() {
-			return
-		}
-
-		_, ok := myBot.UserJoin[m.Sender.ID]
-		if ok {
-			myBot.Bot.Delete(m)
-		}
-	}
-}
-
 func writeFile(path string, data []byte) error {
 	return ioutil.WriteFile(path, data, 0o666)
-}
-
-func (cred *Credentials) deleteMessages(b *tb.Bot) {
-	for _, v := range cred.Pesans {
-		_ = b.Delete(v)
-	}
 }
