@@ -22,7 +22,7 @@ type MyBot struct {
 	UserJoin                 map[int64]*Credentials
 	Retry                    map[int64]int
 	HasReportAdmin           map[int64]bool
-	HasPublishMessage           map[int64]bool
+	HasPublishMessage        map[int64]bool
 	Mutex                    *sync.Mutex
 	Wait                     int64
 	SuperUser                string
@@ -63,9 +63,6 @@ func (myBot *MyBot) RestrictUser(m *tb.Message) (tb.ChatMember, error) {
 	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.Retry[m.UserJoined.ID]*5) * time.Minute).Add(time.Duration(myBot.Wait) * time.Minute).Unix()
 	cm.CanSendMessages = true
 	err = myBot.Bot.Restrict(m.Chat, cm)
-	if err != nil {
-		return *cm, err
-	}
 	return *cm, nil
 }
 
