@@ -21,7 +21,7 @@ func Handle(mb *mybot.MyBot) {
 		}
 
 		if m.Message().FromGroup() {
-			if !mb.IsNewUser(m) {
+			if mb.IsNewUser(m) {
 				return nil
 			}
 
@@ -49,7 +49,7 @@ func Handle(mb *mybot.MyBot) {
 			return nil
 		}
 		mb.Delete(m.Message())
-		if !mb.IsNewUser(m) {
+		if mb.IsNewUser(m) {
 			return nil
 		}
 
@@ -74,7 +74,7 @@ func Handle(mb *mybot.MyBot) {
 			}
 		}
 		send, _ := mb.Send(m.Chat(), "Ping <b>"+res+"</b>", tb.ModeHTML)
-		t := 30 * time.Second
+		t := 5 * time.Minute
 		go mb.DeleteChat(send, t)
 		go func(t time.Duration, chatID int64) {
 			<-time.After(t)
@@ -90,7 +90,7 @@ func Handle(mb *mybot.MyBot) {
 			return nil
 		}
 		mb.Delete(m.Message())
-		if !mb.IsNewUser(m) {
+		if mb.IsNewUser(m) {
 			return nil
 		}
 		mb.Send(m.Chat(), fmt.Sprintf("Halo <b>%v!</b> Berembe kabarm?", mybot.GetFullName(m.Sender().FirstName, m.Sender().LastName)), tb.ModeHTML)
@@ -104,7 +104,7 @@ func Handle(mb *mybot.MyBot) {
 			return nil
 		}
 		mb.Delete(m.Message())
-		if !mb.IsNewUser(m) {
+		if mb.IsNewUser(m) {
 			return nil
 		}
 		msg := fmt.Sprintf("%v, ID Anda adalah %d", mybot.GetFullName(m.Sender().FirstName, m.Sender().LastName), m.Sender().ID)
@@ -122,7 +122,7 @@ func subscriptions(mb *mybot.MyBot) {
 			return nil
 		}
 		mb.Delete(m.Message())
-		if !mb.IsNewUser(m) {
+		if mb.IsNewUser(m) {
 			return nil
 		}
 		if m.Sender().Username == "" {
@@ -159,7 +159,7 @@ func subscriptions(mb *mybot.MyBot) {
 			return nil
 		}
 		mb.Delete(m.Message())
-		if !mb.IsNewUser(m) {
+		if mb.IsNewUser(m) {
 			return nil
 		}
 
@@ -186,7 +186,7 @@ func subscriptions(mb *mybot.MyBot) {
 		}
 
 		mb.Delete(m.Message())
-		if !mb.IsNewUser(m) {
+		if mb.IsNewUser(m) {
 			return nil
 		}
 
