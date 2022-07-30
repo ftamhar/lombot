@@ -21,9 +21,9 @@ type MyBot struct {
 	Db                       *sql.DB
 	UserJoin                 map[int64]*Credentials
 	Retry                    map[int64]int
-	HasReportAdmin           bool
-	HasSendMessage           map[int64]bool
-	Mutex                    sync.Mutex
+	HasReportAdmin           map[int64]bool
+	HasPublishMessage           map[int64]bool
+	Mutex                    *sync.Mutex
 	Wait                     int64
 	SuperUser                string
 	RetryPath                string
@@ -37,9 +37,16 @@ type Credentials struct {
 	User   *tb.User
 	Key    string
 	Pesans []*tb.Message
-	Ch     chan struct{}
 	Wait   time.Duration
 	Retry  uint8
+	Ch     chan struct{}
+}
+
+func (mb *MyBot) IsNewUser(c tb.Context) bool {
+	mb.Mutex.Lock()
+	_, ok := mb.UserJoin[c.Sender().ID]
+	mb.Mutex.Unlock()
+	return ok
 }
 
 func (myBot *MyBot) DeleteChat(m *tb.Message, t time.Duration) {

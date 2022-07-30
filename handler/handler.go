@@ -15,12 +15,20 @@ func Handle(mb *mybot.MyBot) {
 	manageUser(mb)
 
 	mb.Handle("/Bismillah", func(m tb.Context) error {
+		err := mb.Delete(m.Message())
+		if err != nil {
+			return err
+		}
+
 		if m.Message().FromGroup() {
+			if !mb.IsNewUser(m) {
+				return nil
+			}
+
 			send, err := mb.Send(m.Chat(), "MasyaaAllah Tabarakallah")
 			if err != nil {
 				return err
 			}
-			go mb.DeleteChat(m.Message(), 60*time.Second)
 			go mb.DeleteChat(send, 60*time.Second)
 			return nil
 		}
@@ -41,13 +49,17 @@ func Handle(mb *mybot.MyBot) {
 			return nil
 		}
 		mb.Delete(m.Message())
+		if !mb.IsNewUser(m) {
+			return nil
+		}
+
 		mb.Mutex.Lock()
 		defer mb.Mutex.Unlock()
-		status := mb.HasReportAdmin
+		status := mb.HasReportAdmin[m.Chat().ID]
 		if status {
 			return nil
 		}
-		mb.HasReportAdmin = true
+		mb.HasReportAdmin[m.Chat().ID] = true
 		admins, err := mb.AdminsOf(m.Chat())
 		if err != nil {
 			return err
@@ -64,17 +76,21 @@ func Handle(mb *mybot.MyBot) {
 		send, _ := mb.Send(m.Chat(), "Ping <b>"+res+"</b>", tb.ModeHTML)
 		t := 30 * time.Second
 		go mb.DeleteChat(send, t)
-		go func(t time.Duration) {
+		go func(t time.Duration, chatID int64) {
 			<-time.After(t)
 			mb.Mutex.Lock()
-			mb.HasReportAdmin = false
+			delete(mb.HasReportAdmin, chatID)
 			mb.Mutex.Unlock()
-		}(t)
+		}(t, m.Chat().ID)
 		return nil
 	})
 
 	mb.Handle("/halo", func(m tb.Context) error {
 		if !m.Message().FromGroup() {
+			return nil
+		}
+		mb.Delete(m.Message())
+		if !mb.IsNewUser(m) {
 			return nil
 		}
 		mb.Send(m.Chat(), fmt.Sprintf("Halo <b>%v!</b> Berembe kabarm?", mybot.GetFullName(m.Sender().FirstName, m.Sender().LastName)), tb.ModeHTML)
@@ -85,6 +101,10 @@ func Handle(mb *mybot.MyBot) {
 		// all the text messages that weren't
 		// captured by existing handlers
 		if !m.Message().FromGroup() {
+			return nil
+		}
+		mb.Delete(m.Message())
+		if !mb.IsNewUser(m) {
 			return nil
 		}
 		msg := fmt.Sprintf("%v, ID Anda adalah %d", mybot.GetFullName(m.Sender().FirstName, m.Sender().LastName), m.Sender().ID)
@@ -102,18 +122,21 @@ func subscriptions(mb *mybot.MyBot) {
 			return nil
 		}
 		mb.Delete(m.Message())
+		if !mb.IsNewUser(m) {
+			return nil
+		}
 		if m.Sender().Username == "" {
 			return m.Send("Anda belum memiliki username")
 		}
 
-		var count int
+		var count int64
 		err := mb.Db.QueryRow("SELECT COUNT(*) as count FROM subscriptions WHERE room_id = ?", m.Chat().ID).
 			Scan(&count)
 		if err != nil {
 			return err
 		}
 
-		if count == int(mb.MaxSubscribers) {
+		if count > mb.MaxSubscribers {
 			_, err = mb.Send(m.Chat(), "Maaf, batas pendaftaran subscriber telah tercapai")
 			return err
 		}
@@ -136,6 +159,9 @@ func subscriptions(mb *mybot.MyBot) {
 			return nil
 		}
 		mb.Delete(m.Message())
+		if !mb.IsNewUser(m) {
+			return nil
+		}
 
 		if m.Sender().Username == "" {
 			return nil
@@ -158,14 +184,20 @@ func subscriptions(mb *mybot.MyBot) {
 		if !m.Message().FromGroup() {
 			return nil
 		}
-		mb.Mutex.Lock()
-		defer mb.Mutex.Unlock()
 
-		if mb.HasSendMessage[m.Chat().ID] {
+		mb.Delete(m.Message())
+		if !mb.IsNewUser(m) {
 			return nil
 		}
 
-		mb.HasSendMessage[m.Chat().ID] = true
+		mb.Mutex.Lock()
+		defer mb.Mutex.Unlock()
+
+		if mb.HasPublishMessage[m.Chat().ID] {
+			return nil
+		}
+
+		mb.HasPublishMessage[m.Chat().ID] = true
 		var msg string
 
 		rows, err := mb.Db.Query("select user_name from subscriptions where room_id = ?", m.Chat().ID)
@@ -216,14 +248,14 @@ func subscriptions(mb *mybot.MyBot) {
 
 		}
 		if mb.SubsSpamMessage == 0 {
-			delete(mb.HasSendMessage, m.Chat().ID)
+			delete(mb.HasPublishMessage, m.Chat().ID)
 			return nil
 		}
 
 		go func() {
 			<-time.After(mb.SubsSpamMessage * time.Minute)
 			mb.Mutex.Lock()
-			delete(mb.HasSendMessage, m.Chat().ID)
+			delete(mb.HasPublishMessage, m.Chat().ID)
 			mb.Mutex.Unlock()
 		}()
 
