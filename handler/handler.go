@@ -103,7 +103,7 @@ func subscriptions(mb *mybot.MyBot) {
 		}
 		mb.Delete(m.Message())
 		if m.Sender().Username == "" {
-			return nil
+			return m.Send("Anda belum memiliki username")
 		}
 
 		var count int
@@ -178,14 +178,20 @@ func subscriptions(mb *mybot.MyBot) {
 		var username string
 		var max int64
 		for rows.Next() {
-			if max == mb.MaxSubscribers {
-				break
-			}
-			max++
 			err := rows.Scan(&username)
 			if err != nil {
 				return err
 			}
+
+			if username == m.Sender().Username {
+				continue
+			}
+
+			if max == mb.MaxSubscribers {
+				break
+			}
+			max++
+
 			msg += fmt.Sprintf("@%s ", username)
 			if batchMessages == mb.BatchMessagesSubscribers {
 				send, err := mb.Send(m.Chat(), msg)
