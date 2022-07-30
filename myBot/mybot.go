@@ -22,11 +22,13 @@ type MyBot struct {
 	UserJoin                 map[int64]*Credentials
 	Retry                    map[int64]int
 	HasReportAdmin           bool
+	HasSendMessage           map[int64]bool
 	Mutex                    sync.Mutex
 	Wait                     int64
 	SuperUser                string
 	RetryPath                string
-	SubsTimeout              time.Duration
+	SubsDeleteMessageTimeout time.Duration
+	SubsSpamMessage          time.Duration
 	MaxSubscribers           int64
 	BatchMessagesSubscribers int64
 }

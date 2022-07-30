@@ -26,12 +26,13 @@ var (
 	retryPath                string
 	token                    string
 	superUser                string
-	subTimeout               int
+	subsDeleteMessageTimeout int
 	wait                     int64
 	ignore                   int64
 	verbose                  bool
 	maxSubscribers           int64
 	batchMessagesSubscribers int64
+	subsSpamMessage          int64
 )
 
 func init() {
@@ -45,9 +46,10 @@ func init() {
 	flag.StringVar(&superUser, "u", "", "super user")
 	flag.Int64Var(&wait, "w", 5, "lama menunggu jawaban (menit)")
 	flag.Int64Var(&ignore, "i", 10, "lama mengabaikan chat (detik)")
-	flag.IntVar(&subTimeout, "st", 0, "timeout subscription (menit)")
+	flag.IntVar(&subsDeleteMessageTimeout, "sdmt", 0, "timeout subscription (menit)")
 	flag.Int64Var(&maxSubscribers, "ms", 100, "max subscriber")
 	flag.Int64Var(&batchMessagesSubscribers, "bms", 30, "batch subscribe")
+	flag.Int64Var(&subsSpamMessage, "ssm", 0, "subs spam message")
 
 	flag.Func("v", "mode debug (boolean) (default false)", func(s string) error {
 		if s != "true" && s != "false" {
@@ -139,11 +141,14 @@ func main() {
 		Db:                       db,
 		UserJoin:                 make(map[int64]*mybot.Credentials),
 		Retry:                    make(map[int64]int),
+		HasReportAdmin:           false,
+		HasSendMessage:           make(map[int64]bool),
 		Mutex:                    sync.Mutex{},
 		Wait:                     wait,
 		SuperUser:                superUser,
 		RetryPath:                retryPath,
-		SubsTimeout:              time.Duration(subTimeout),
+		SubsDeleteMessageTimeout: time.Duration(subsDeleteMessageTimeout),
+		SubsSpamMessage:          time.Duration(subsSpamMessage),
 		MaxSubscribers:           maxSubscribers,
 		BatchMessagesSubscribers: batchMessagesSubscribers,
 	}

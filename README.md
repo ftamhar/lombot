@@ -9,9 +9,10 @@ Project bot telegram sederhana dan suka-suka untuk mengisi waktu luang.
     -w   : Lama menunggu jawaban (menit) (default 5)
     -i   : Lama mengabaikan pesan (detik) (default 60)
     -v   : Mode debug (boolean) (default false)
-    -st  : Timeout pesan subscription terhapus (menit) (dafault 0 -> tidak terhapus)
+    -sdmt  : Timeout pesan subscription terhapus (menit) (dafault 0 -> tidak terhapus)
     -ms  : Maksimal Subscribers dalam 1 group (default 100)
     -bms : Batch messages subscribers yang akan di kirim (default 30)
+    -mms : Timeout message subscribers spam (menit) (default 0 -> tidak ada timeout)
 
 ## Cara Menjalankan Bot
 ```shell

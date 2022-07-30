@@ -158,7 +158,14 @@ func subscriptions(mb *mybot.MyBot) {
 		if !m.Message().FromGroup() {
 			return nil
 		}
+		mb.Mutex.Lock()
+		defer mb.Mutex.Unlock()
 
+		if mb.HasSendMessage[m.Chat().ID] {
+			return nil
+		}
+
+		mb.HasSendMessage[m.Chat().ID] = true
 		var msg string
 
 		rows, err := mb.Db.Query("select user_name from subscriptions where room_id = ?", m.Chat().ID)
@@ -185,8 +192,8 @@ func subscriptions(mb *mybot.MyBot) {
 				if err != nil {
 					return err
 				}
-				if mb.SubsTimeout > 0 {
-					go mb.DeleteChat(send, mb.SubsTimeout*time.Minute)
+				if mb.SubsDeleteMessageTimeout > 0 {
+					go mb.DeleteChat(send, mb.SubsDeleteMessageTimeout*time.Minute)
 				}
 				msg = ""
 			}
@@ -197,11 +204,23 @@ func subscriptions(mb *mybot.MyBot) {
 			if err != nil {
 				return err
 			}
-			if mb.SubsTimeout > 0 {
-				go mb.DeleteChat(send, mb.SubsTimeout*time.Minute)
+			if mb.SubsDeleteMessageTimeout > 0 {
+				go mb.DeleteChat(send, mb.SubsDeleteMessageTimeout*time.Minute)
 			}
 
 		}
+		if mb.SubsSpamMessage == 0 {
+			delete(mb.HasSendMessage, m.Chat().ID)
+			return nil
+		}
+
+		go func() {
+			<-time.After(mb.SubsSpamMessage * time.Minute)
+			mb.Mutex.Lock()
+			delete(mb.HasSendMessage, m.Chat().ID)
+			mb.Mutex.Unlock()
+		}()
+
 		return nil
 	})
 }
