@@ -35,7 +35,7 @@ func OpenSqlite() (*sql.DB, error) {
 	db.SetMaxOpenConns(100)
 	db.SetMaxIdleConns(4)
 
-	_, err = db.Exec(" CREATE TABLE IF NOT EXISTS `subscriptions` ( `room_id` INTEGER, `user_name` TEXT, PRIMARY KEY (`room_id`, `user_name`) ); CREATE TABLE IF NOT EXISTS `pse` ( `id` INTEGER PRIMARY KEY, `name` TEXT, `company` TEXT, `location` TEXT CHECK( location IN ('Domestik','Asing') ) ); CREATE INDEX IF NOT EXISTS `pse_index_0` ON `pse` (`name`); ")
+	_, err = db.Exec("DROP TABLE IF EXISTS `pse`; CREATE TABLE IF NOT EXISTS `subscriptions` ( `room_id` INTEGER, `user_name` TEXT, PRIMARY KEY (`room_id`, `user_name`) ); CREATE TABLE `pse` ( `id` INTEGER PRIMARY KEY, `name` TEXT, `website` TEXT, `company` TEXT, `location` TEXT CHECK( location IN ('Domestik','Asing') ) ); CREATE INDEX IF NOT EXISTS `pse_index_0` ON `pse` (`name`); CREATE INDEX IF NOT EXISTS `pse_index_1` ON `pse` (`website`); CREATE INDEX IF NOT EXISTS `pse_index_2` ON `pse` (`company`); ")
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +116,12 @@ func Scrape(db *sql.DB, ch <-chan helperPSE, wg *sync.WaitGroup) {
 		}
 
 		count := 0
-		query := "INSERT INTO pse (name, company, location) VALUES "
+		query := "INSERT INTO pse (name, company, location, website) VALUES "
 		values := make([]string, 0, 51)
 		args := make([]any, 0, 51*3)
 		for _, data := range pseResponse.Data {
-			args = append(args, data.Attributes.Nama, data.Attributes.NamaPerusahaan, pse.location)
-			values = append(values, "(?, ?, ?)")
+			args = append(args, data.Attributes.Nama, data.Attributes.NamaPerusahaan, pse.location, data.Attributes.Website)
+			values = append(values, "(?, ?, ?, ?)")
 			count++
 
 			if count >= 50 {

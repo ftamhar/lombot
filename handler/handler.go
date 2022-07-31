@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -428,8 +429,44 @@ func pse(mb *mybot.MyBot) {
 			return m.Send("payload minimal 2 karakter")
 		}
 
-		payload = fmt.Sprintf("%%%s%%", payload)
-		rows, err := mb.Db.Query("select name, company, location from pse where name like ? limit 10", payload)
+		page := 1
+		arrPayload := strings.Split(payload, ";")
+		if len(arrPayload) == 2 {
+			var err error
+			page, err = strconv.Atoi(strings.Trim(arrPayload[1], " "))
+			if err != nil {
+				return m.Send("Payload page harus angka")
+			}
+		}
+
+		var countData int
+
+		search := fmt.Sprintf("%%%s%%", strings.Trim(arrPayload[0], " "))
+
+		err := mb.Db.QueryRow("SELECT COUNT(*) FROM pse WHERE name LIKE ?", search).Scan(&countData)
+		if err != nil {
+			return err
+		}
+
+		if countData == 0 {
+			return m.Send("Data tidak ditemukan")
+		}
+		limit := 10
+
+		query := "select name, company, location, website from pse where name like ? or website like ? or company like ? order by name limit ? offset ?"
+
+		offset := func() int {
+			if page*limit-countData > limit || page <= 0 {
+				return -1
+			}
+			return (page - 1) * limit
+		}()
+
+		if offset == -1 {
+			return m.Send("Page tidak ada")
+		}
+
+		rows, err := mb.Db.Query(query, search, search, search, limit, offset)
 		if err != nil {
 			return err
 		}
@@ -440,16 +477,24 @@ func pse(mb *mybot.MyBot) {
 			var name string
 			var company string
 			var location string
-			err = rows.Scan(&name, &company, &location)
+			var website string
+			err = rows.Scan(&name, &company, &location, &website)
 			if err != nil {
 				return err
 			}
-			msg += fmt.Sprintf("NAME : %s\nCOMPANY : %s\nJENIS PERUSAHAAN : %s\n\n", name, company, location)
-		}
-		if msg == "" {
-			msg = "Data tidak ditemukan"
+			msg += fmt.Sprintf("NAME : %s\nCOMPANY : %s\nWEBSITE : %s\nJENIS PERUSAHAAN : %s\n\n", name, company, website, location)
 		}
 		_, err = mb.Send(m.Chat(), msg, tb.ModeHTML)
-		return err
+		if err != nil {
+			return err
+		}
+
+		pageSize := func() int {
+			if countData%limit == 0 {
+				return countData / limit
+			}
+			return (countData / limit) + 1
+		}()
+		return m.Send(fmt.Sprintf("Search : %s (order by name)\nHalaman : %d/%d\nJumlah Data : %d", arrPayload[0], page, pageSize, countData))
 	})
 }
