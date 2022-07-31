@@ -445,7 +445,7 @@ func pse(mb *mybot.MyBot) {
 
 		search := fmt.Sprintf("%%%s%%", strings.Trim(arrPayload[0], " "))
 
-		err := mb.Db.QueryRow("SELECT COUNT(*) FROM pse WHERE name LIKE ?", search).Scan(&countData)
+		err := mb.Db.QueryRow("SELECT COUNT(*) FROM pse WHERE name LIKE ? or website like ? or company like ?", search, search, search).Scan(&countData)
 		if err != nil {
 			return err
 		}
