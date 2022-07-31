@@ -131,10 +131,11 @@ func main() {
 		}
 	}()
 
-	db, err := database.OpenDbConnection()
+	db, err := database.OpenSqlite()
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer db.Close()
 
 	myBot := &mybot.MyBot{
 		Bot:                      b,
@@ -166,6 +167,32 @@ func main() {
 		}
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	log.Println("loading data pse")
+	go func() {
+		urls := []database.PSETerdaftar{
+			{
+				Url:      "https://pse.kominfo.go.id/static/json-static/ASING_TERDAFTAR/",
+				Location: "Asing",
+			},
+			{
+				Url:      "https://pse.kominfo.go.id/static/json-static/LOKAL_TERDAFTAR/",
+				Location: "Domestik",
+			},
+		}
+		err := database.UpdatePseSqlite(myBot, urls)
+		if err != nil {
+			log.Fatal(err)
+		}
+		wg.Done()
+		for {
+			time.Sleep(5 * time.Hour)
+			database.UpdatePseSqlite(myBot, urls)
+		}
+	}()
+	wg.Wait()
+	log.Println("finish loading data pse")
 	handler.Handle(myBot)
 	fmt.Println("bot started")
 	b.Start()

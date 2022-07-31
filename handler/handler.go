@@ -13,6 +13,7 @@ import (
 func Handle(mb *mybot.MyBot) {
 	subscriptions(mb)
 	manageUser(mb)
+	pse(mb)
 
 	mb.Handle("/Bismillah", func(m tb.Context) error {
 		err := mb.Delete(m.Message())
@@ -408,5 +409,41 @@ Jika 3 kali salah, maka akan diberi captcha baru.</b>`, mybot.GetFullName(m.Mess
 		}
 		mb.Delete(m.Message().ReplyTo)
 		return nil
+	})
+}
+
+func pse(mb *mybot.MyBot) {
+	mb.Handle("/pse", func(m tb.Context) error {
+		if !m.Message().FromGroup() {
+			return nil
+		}
+
+		if mb.IsNewUser(m) {
+			return nil
+		}
+
+		payload := fmt.Sprintf("%%%s%%", m.Message().Payload)
+		rows, err := mb.Db.Query("select name, company, location from pse where name like ?", payload)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		var msg string
+		for rows.Next() {
+			var name string
+			var company string
+			var location string
+			err = rows.Scan(&name, &company, &location)
+			if err != nil {
+				return err
+			}
+			msg += fmt.Sprintf("NAME : %s\nCOMPANY : %s\nJENIS PERUSAHAAN : %s\n\n", name, company, location)
+		}
+		if msg == "" {
+			msg = "Data tidak ditemukan"
+		}
+		_, err = mb.Send(m.Chat(), msg, tb.ModeHTML)
+		return err
 	})
 }
