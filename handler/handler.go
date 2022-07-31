@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	mybot "lombot/myBot"
@@ -421,9 +422,14 @@ func pse(mb *mybot.MyBot) {
 		if mb.IsNewUser(m) {
 			return nil
 		}
+		payload := m.Message().Payload
+		payload = strings.Trim(payload, " ")
+		if len(payload) <= 1 {
+			return m.Send("payload minimal 2 karakter")
+		}
 
-		payload := fmt.Sprintf("%%%s%%", m.Message().Payload)
-		rows, err := mb.Db.Query("select name, company, location from pse where name like ?", payload)
+		payload = fmt.Sprintf("%%%s%%", payload)
+		rows, err := mb.Db.Query("select name, company, location from pse where name like ? limit 10", payload)
 		if err != nil {
 			return err
 		}
