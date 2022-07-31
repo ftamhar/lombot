@@ -51,6 +51,7 @@ type helperPSE struct {
 }
 
 func UpdatePseSqlite(mb *mybot.MyBot, pses []PSETerdaftar) error {
+	log.Println("loading data pse")
 	mb.Mutex.Lock()
 	defer mb.Mutex.Unlock()
 	_, err := mb.Db.Exec("DELETE FROM pse; VACUUM;")

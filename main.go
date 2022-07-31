@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -167,10 +168,9 @@ func main() {
 		}
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	log.Println("loading data pse")
+	ch := make(chan struct{})
 	go func() {
+		generateAt := checkPseTime()
 		urls := []database.PSETerdaftar{
 			{
 				Url:      "https://pse.kominfo.go.id/static/json-static/ASING_TERDAFTAR/",
@@ -185,13 +185,22 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		wg.Done()
+		ch <- struct{}{}
 		for {
-			time.Sleep(5 * time.Hour)
+			time.Sleep(1 * time.Hour)
+			log.Println("checking data pse")
+			generateAtNow := checkPseTime()
+			if generateAt == generateAtNow || generateAtNow == "" {
+				log.Println("no change")
+				continue
+			}
+			generateAt = generateAtNow
 			database.UpdatePseSqlite(myBot, urls)
+			log.Println("data pse updated")
 		}
 	}()
-	wg.Wait()
+	<-ch
+	close(ch)
 	log.Println("finish loading data pse")
 	handler.Handle(myBot)
 	fmt.Println("bot started")
@@ -200,4 +209,27 @@ func main() {
 
 func writeFile(path string, data []byte) error {
 	return ioutil.WriteFile(path, data, 0o666)
+}
+
+func checkPseTime() string {
+	type responseCheck struct {
+		Data struct {
+			GeneratedAt string `json:"generated_at"`
+		} `json:"data"`
+	}
+	client := http.DefaultClient
+	res, err := client.Get("https://pse.kominfo.go.id/static/json-static/generationInfo.json")
+	if err != nil {
+		log.Println("failed to get generation info:", err.Error())
+		return ""
+	}
+
+	var response responseCheck
+	err = json.NewDecoder(res.Body).Decode(&response)
+	res.Body.Close()
+	if err != nil {
+		log.Println("failed to decode generation info:", err.Error())
+		return ""
+	}
+	return response.Data.GeneratedAt
 }
