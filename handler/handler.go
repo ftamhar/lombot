@@ -226,6 +226,7 @@ func subscriptions(mb *mybot.MyBot) {
 				break
 			}
 			max++
+			batchMessages++
 
 			msg += fmt.Sprintf("@%s ", username)
 			if batchMessages == mb.BatchMessagesSubscribers {
@@ -237,6 +238,7 @@ func subscriptions(mb *mybot.MyBot) {
 					go mb.DeleteChat(send, mb.SubsDeleteMessageTimeout*time.Minute)
 				}
 				msg = ""
+				batchMessages = 0
 			}
 		}
 
