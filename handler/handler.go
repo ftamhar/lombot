@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -427,9 +428,6 @@ func pse(mb *mybot.MyBot) {
 		}
 		payload := m.Message().Payload
 		payload = strings.Trim(payload, " ")
-		if len(payload) <= 1 {
-			return m.Send("payload minimal 2 karakter")
-		}
 
 		page := 1
 		arrPayload := strings.Split(payload, ";")
@@ -443,9 +441,23 @@ func pse(mb *mybot.MyBot) {
 
 		var countData int
 
-		search := fmt.Sprintf("%%%s%%", strings.Trim(arrPayload[0], " "))
+		search := strings.Trim(arrPayload[0], " ")
 
-		err := mb.Db.QueryRow("SELECT COUNT(*) FROM pse WHERE name LIKE ? or website like ? or company like ?", search, search, search).Scan(&countData)
+		matched, err := regexp.MatchString("^[a-zA-Z0-9 ]+$", search)
+		if err != nil {
+			return err
+		}
+
+		if !matched {
+			return m.Send("Payload harus huruf dan angka")
+		}
+		if len(search) <= 1 {
+			return m.Send("payload minimal 2 karakter")
+		}
+
+		search = fmt.Sprintf("%%%s%%", search)
+
+		err = mb.Db.QueryRow("SELECT COUNT(*) FROM pse WHERE name LIKE ? or website like ? or company like ?", search, search, search).Scan(&countData)
 		if err != nil {
 			return err
 		}
