@@ -285,14 +285,15 @@ func manageUser(mb *mybot.MyBot) {
 			return nil
 		}
 
+		key := fmt.Sprintf("%v_%v", m.Chat().ID, m.Message().UserJoined.ID)
 		mb.Mutex.Lock()
 		defer mb.Mutex.Unlock()
-		_, ok := mb.UserJoin[m.Message().UserJoined.ID]
+		_, ok := mb.UserJoin[key]
 		if ok {
 			return nil
 		}
 
-		mb.Retry[m.Message().UserJoined.ID]++
+		mb.Retry[key]++
 		newMember, err := mb.RestrictUser(m.Message())
 		if err != nil {
 			send, _ := mb.Send(m.Chat(), "Hai Admin, tolong jadikan saya admin agar dapat mengirim captcha 🙏")
@@ -308,7 +309,7 @@ func manageUser(mb *mybot.MyBot) {
 			Wait:   time.Duration(mb.Wait) * time.Minute,
 		}
 
-		mb.UserJoin[m.Message().UserJoined.ID] = credential
+		mb.UserJoin[key] = credential
 		imgCaptcha, key, path, err := mybot.GetCaptcha()
 		if err != nil {
 			return err
@@ -351,9 +352,10 @@ Jika 3 kali salah, maka akan diberi captcha baru.</b>`, mybot.GetFullName(m.Mess
 	})
 
 	mb.Handle(tb.OnText, func(m tb.Context) error {
+		key := fmt.Sprintf("%v_%v", m.Chat().ID, m.Sender().ID)
 		mb.Mutex.Lock()
 		defer mb.Mutex.Unlock()
-		cred, ok := mb.UserJoin[m.Sender().ID]
+		cred, ok := mb.UserJoin[key]
 		if ok {
 			if m.Message().Text == cred.Key {
 				mb.Delete(m.Message())

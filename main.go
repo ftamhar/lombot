@@ -141,8 +141,8 @@ func main() {
 	myBot := &mybot.MyBot{
 		Bot:                      b,
 		Db:                       db,
-		UserJoin:                 make(map[int64]*mybot.Credentials),
-		Retry:                    make(map[int64]int),
+		UserJoin:                 make(map[string]*mybot.Credentials),
+		Retry:                    make(map[string]int),
 		HasReportAdmin:           make(map[int64]bool),
 		HasPublishMessage:        make(map[int64]bool),
 		Mutex:                    &sync.Mutex{},

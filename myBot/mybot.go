@@ -19,8 +19,8 @@ import (
 type MyBot struct {
 	*tb.Bot
 	Db                       *sql.DB
-	UserJoin                 map[int64]*Credentials
-	Retry                    map[int64]int
+	UserJoin                 map[string]*Credentials
+	Retry                    map[string]int
 	HasReportAdmin           map[int64]bool
 	HasPublishMessage        map[int64]bool
 	Mutex                    *sync.Mutex
@@ -43,8 +43,9 @@ type Credentials struct {
 }
 
 func (mb *MyBot) IsNewUser(c tb.Context) bool {
+	key := fmt.Sprintf("%v_%v", c.Chat().ID, c.Sender().ID)
 	mb.Mutex.Lock()
-	_, ok := mb.UserJoin[c.Sender().ID]
+	_, ok := mb.UserJoin[key]
 	mb.Mutex.Unlock()
 	return ok
 }
@@ -57,10 +58,12 @@ func (myBot *MyBot) DeleteChat(m *tb.Message, t time.Duration) {
 func (myBot *MyBot) RestrictUser(m *tb.Message) (tb.ChatMember, error) {
 	cm, err := myBot.Bot.ChatMemberOf(m.Chat, m.UserJoined)
 	if err != nil {
-		fmt.Println("failed to get chat member:", err.Error())
+		return tb.ChatMember{}, err
 	}
 
-	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.Retry[m.UserJoined.ID]*5) * time.Minute).Add(time.Duration(myBot.Wait) * time.Minute).Unix()
+	key := fmt.Sprintf("%v_%v", m.Chat.ID, m.UserJoined.ID)
+
+	cm.RestrictedUntil = time.Now().Add(time.Duration(myBot.Retry[key]*5) * time.Minute).Add(time.Duration(myBot.Wait) * time.Minute).Unix()
 	cm.CanSendMessages = true
 	err = myBot.Bot.Restrict(m.Chat, cm)
 	return *cm, nil
@@ -81,8 +84,9 @@ func (myBot *MyBot) IsSenderAdmin(m *tb.Message) bool {
 }
 
 func (mb *MyBot) AcceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
+	key := fmt.Sprintf("%v_%v", m.Chat.ID, m.UserJoined.ID)
 	mb.Mutex.Lock()
-	cred := mb.UserJoin[m.UserJoined.ID]
+	cred := mb.UserJoin[key]
 	mb.Mutex.Unlock()
 	select {
 	case <-time.After(cred.Wait):
@@ -93,7 +97,7 @@ func (mb *MyBot) AcceptOrDelete(m *tb.Message, cm *tb.ChatMember) {
 
 		cred.DeleteMessages(mb.Bot)
 		mb.Mutex.Lock()
-		delete(mb.UserJoin, cred.User.ID)
+		delete(mb.UserJoin, key)
 		mb.Mutex.Unlock()
 		return
 
@@ -107,8 +111,8 @@ Selamat datang <b><a href="tg://user?id=%v">%v</a></b>
 Anda dapat mengirim media setelah pesan ini hilang`, cred.User.ID, GetFullName(cred.User.FirstName, cred.User.LastName))
 
 		mb.Mutex.Lock()
-		delete(mb.UserJoin, cred.User.ID)
-		delete(mb.Retry, cred.User.ID)
+		delete(mb.UserJoin, key)
+		delete(mb.Retry, key)
 		mb.Mutex.Unlock()
 
 		SaveFileJson(mb.Retry, mb.RetryPath)
@@ -130,7 +134,11 @@ func (myBot *MyBot) NotText() tb.HandlerFunc {
 			return nil
 		}
 
-		_, ok := myBot.UserJoin[m.Sender().ID]
+		key := fmt.Sprintf("%v_%v", m.Chat().ID, m.Sender().ID)
+
+		myBot.Mutex.Lock()
+		defer myBot.Mutex.Unlock()
+		_, ok := myBot.UserJoin[key]
 		if ok {
 			myBot.Bot.Delete(m.Message())
 		}
