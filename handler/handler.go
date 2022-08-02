@@ -293,6 +293,11 @@ func manageUser(mb *mybot.MyBot) {
 			return nil
 		}
 
+		if len(mb.UserJoin) > 100 {
+			mb.Ban(m.Chat(), &tb.ChatMember{User: m.Message().UserJoined, RestrictedUntil: tb.Forever()}, false)
+			return nil
+		}
+
 		mb.Retry[key]++
 		newMember, err := mb.RestrictUser(m.Message())
 		if err != nil {
@@ -410,7 +415,7 @@ Jika 3 kali salah, maka akan diberi captcha baru.</b>`, mybot.GetFullName(m.Mess
 			return err
 		}
 		cm.RestrictedUntil = tb.Forever()
-		err = mb.Ban(m.Chat(), cm)
+		err = mb.Ban(m.Chat(), cm, false)
 		if err != nil {
 			return err
 		}
