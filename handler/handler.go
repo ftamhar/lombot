@@ -293,9 +293,17 @@ func manageUser(mb *mybot.MyBot) {
 			return nil
 		}
 
-		if len(mb.UserJoin) > 100 {
-			mb.Ban(m.Chat(), &tb.ChatMember{User: m.Message().UserJoined, RestrictedUntil: tb.Forever()}, false)
-			return nil
+		chatID := fmt.Sprintf("%v", m.Chat().ID)
+		count := 0
+
+		for k := range mb.UserJoin {
+			if k[:len(chatID)] == chatID {
+				count++
+			}
+			if count > 30 {
+				mb.Ban(m.Chat(), &tb.ChatMember{User: m.Message().UserJoined, RestrictedUntil: tb.Forever()}, false)
+				return nil
+			}
 		}
 
 		mb.Retry[key]++
