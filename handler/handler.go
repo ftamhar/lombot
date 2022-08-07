@@ -444,6 +444,69 @@ func pse(mb *mybot.MyBot) {
 		payload := m.Message().Payload
 		payload = strings.Trim(payload, " ")
 
+		switch payload {
+		case "!start":
+			mb.Delete(m.Message())
+
+			cm, err := mb.AdminsOf(m.Chat())
+			if err != nil {
+				return err
+			}
+
+			if !IsSenderAdmin(cm, m.Sender().ID) {
+				return nil
+			}
+			_, err = mb.Db.Exec("DELETE FROM pse_groups WHERE group_id = ?", m.Chat().ID)
+			if err != nil {
+				return err
+			}
+			m2, err := mb.Send(m.Chat(), "Pencarian PSE telah di aktifkan")
+			go func() {
+				time.Sleep(time.Minute)
+				mb.Delete(m2)
+			}()
+			return err
+
+		case "!stop":
+			mb.Delete(m.Message())
+			cm, err := mb.AdminsOf(m.Chat())
+			if err != nil {
+				return err
+			}
+
+			if !IsSenderAdmin(cm, m.Sender().ID) {
+				return nil
+			}
+
+			_, err = mb.Db.Exec("INSERT INTO pse_groups (group_id) values (?)", m.Chat().ID)
+			if err != nil {
+				return err
+			}
+
+			m2, err := mb.Send(m.Chat(), "Pencarian PSE telah di nonaktifkan")
+			go func() {
+				time.Sleep(time.Minute)
+				mb.Delete(m2)
+			}()
+
+			return err
+		default:
+			var isInGroup int
+			err := mb.Db.QueryRow("SELECT COUNT(*) FROM pse_groups WHERE group_id = ?", m.Chat().ID).Scan(&isInGroup)
+			if err != nil {
+				return err
+			}
+			if isInGroup != 0 {
+				mb.Delete(m.Message())
+				m2, err := mb.Send(m.Chat(), "Pencarian PSE tidak aktif")
+				go func() {
+					time.Sleep(time.Minute)
+					mb.Delete(m2)
+				}()
+				return err
+			}
+		}
+
 		page := 1
 		arrPayload := strings.Split(payload, ";")
 		if len(arrPayload) == 2 {
@@ -526,4 +589,13 @@ func pse(mb *mybot.MyBot) {
 		}()
 		return m.Send(fmt.Sprintf("Search : %s (order by name)\nHalaman : %d/%d\nJumlah Data : %d", arrPayload[0], page, pageSize, countData))
 	})
+}
+
+func IsSenderAdmin(admins []tb.ChatMember, senderID int64) bool {
+	for _, admin := range admins {
+		if admin.User.ID == senderID {
+			return true
+		}
+	}
+	return false
 }

@@ -39,6 +39,10 @@ func OpenSqlite() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS pse_groups (group_id INTEGER PRIMARY KEY)")
+	if err != nil {
+		return nil, err
+	}
 	return db, nil
 }
 
