@@ -454,7 +454,12 @@ func pse(mb *mybot.MyBot) {
 			}
 
 			if !IsSenderAdmin(cm, m.Sender().ID) {
-				return nil
+				m3, err := mb.Send(m.Chat(), "Anda bukan admin")
+				go func() {
+					time.Sleep(time.Second * 5)
+					mb.Delete(m3)
+				}()
+				return err
 			}
 			_, err = mb.Db.Exec("DELETE FROM pse_groups WHERE group_id = ?", m.Chat().ID)
 			if err != nil {
@@ -475,7 +480,12 @@ func pse(mb *mybot.MyBot) {
 			}
 
 			if !IsSenderAdmin(cm, m.Sender().ID) {
-				return nil
+				m3, err := mb.Send(m.Chat(), "Anda bukan admin")
+				go func() {
+					time.Sleep(time.Second * 5)
+					mb.Delete(m3)
+				}()
+				return err
 			}
 
 			_, err = mb.Db.Exec("INSERT INTO pse_groups (group_id) values (?)", m.Chat().ID)
